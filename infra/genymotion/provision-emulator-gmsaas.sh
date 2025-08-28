@@ -58,10 +58,32 @@ authenticate_gmsaas() {
     # Configure Android SDK path for gmsaas (use container's Android SDK path)
     local android_sdk_path="${ANDROID_HOME:-/opt/android-sdk}"
     log_info "Configuring Android SDK path: $android_sdk_path"
-    if ! gmsaas config set android-sdk-path "$android_sdk_path" >/dev/null 2>&1; then
-        log_error "Failed to configure Android SDK path for gmsaas"
+    
+    # Debug: Check if SDK path exists and what's in it
+    log_info "Checking Android SDK path..."
+    if [ -d "$android_sdk_path" ]; then
+        log_info "✓ Android SDK directory exists"
+        log_info "Contents: $(ls -la "$android_sdk_path" 2>/dev/null)"
+        if [ -d "$android_sdk_path/platform-tools" ]; then
+            log_info "✓ platform-tools directory exists"
+            log_info "platform-tools contents: $(ls -la "$android_sdk_path/platform-tools" 2>/dev/null)"
+        else
+            log_warn "platform-tools directory missing"
+        fi
+    else
+        log_error "Android SDK path does not exist: $android_sdk_path"
         exit 1
     fi
+    
+    # Try to configure gmsaas with SDK path
+    log_info "Setting gmsaas android-sdk-path..."
+    if ! gmsaas config set android-sdk-path "$android_sdk_path"; then
+        log_error "Failed to configure Android SDK path for gmsaas"
+        log_error "Trying to debug gmsaas config..."
+        gmsaas config show || true
+        exit 1
+    fi
+    log_info "✓ Android SDK path configured successfully"
     
     # Authenticate using gmsaas auth token command
     log_info "Authenticating with API token..."
