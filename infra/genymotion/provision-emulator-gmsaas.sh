@@ -144,21 +144,59 @@ EOF
     return 1
 }
 
+# Find recipe UUID by name
+find_recipe_uuid() {
+    log_info "Finding recipe UUID for: $RECIPE_NAME"
+    
+    local recipes_output
+    recipes_output=$(gmsaas recipes list --format json 2>/dev/null)
+    
+    local recipe_uuid
+    recipe_uuid=$(echo "$recipes_output" | jq -r --arg recipe "$RECIPE_NAME" \
+        '.[] | select(.name == $recipe) | .uuid' | head -1)
+    
+    if [ -z "$recipe_uuid" ] || [ "$recipe_uuid" = "null" ]; then
+        log_error "Recipe not found: $RECIPE_NAME"
+        log_error "Available recipes:"
+        gmsaas recipes list | head -10
+        exit 1
+    fi
+    
+    log_info "Found recipe UUID: $recipe_uuid"
+    echo "$recipe_uuid"
+}
+
 # Create new instance
 create_instance() {
     log_info "Creating new Genymotion Cloud instance..."
     log_info "Recipe: $RECIPE_NAME"
     log_info "Name: $DEVICE_NAME"
     
-    # Start new instance
+    # Get recipe UUID first
+    local recipe_uuid
+    recipe_uuid=$(find_recipe_uuid)
+    
+    # Start new instance with UUID (not name)
+    log_info "Starting instance: gmsaas instances start $recipe_uuid $DEVICE_NAME"
     local start_output
-    start_output=$(gmsaas instances start "$RECIPE_NAME" "$DEVICE_NAME" 2>&1)
+    start_output=$(gmsaas instances start "$recipe_uuid" "$DEVICE_NAME" 2>&1)
+    local exit_code=$?
+    
+    log_info "gmsaas exit code: $exit_code"
+    log_info "Output: $start_output"
+    
+    if [ $exit_code -ne 0 ]; then
+        log_error "Failed to start instance"
+        log_error "Command: gmsaas instances start $recipe_uuid $DEVICE_NAME"
+        log_error "Output: $start_output"
+        exit 1
+    fi
     
     # Extract UUID from output
     INSTANCE_ID=$(echo "$start_output" | grep -o '[0-9a-f-]\{36\}' | head -1)
     
     if [ -z "$INSTANCE_ID" ]; then
-        log_error "Failed to create instance"
+        log_error "Failed to extract instance ID from gmsaas output"
         log_error "Output: $start_output"
         exit 1
     fi
