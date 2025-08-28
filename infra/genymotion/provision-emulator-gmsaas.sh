@@ -144,45 +144,17 @@ EOF
     return 1
 }
 
-# Find recipe UUID by name
-find_recipe_uuid() {
-    log_info "Finding recipe UUID for: $RECIPE_NAME"
-    
-    local recipes_output
-    recipes_output=$(gmsaas recipes list --format json 2>/dev/null)
-    
-    log_info "Recipes API response (first 500 chars): $(echo "$recipes_output" | head -c 500)"
-    
-    local recipe_uuid
-    recipe_uuid=$(echo "$recipes_output" | jq -r --arg recipe "$RECIPE_NAME" \
-        '.[] | select(.name == $recipe) | .uuid' | head -1)
-    
-    log_info "jq search result: '$recipe_uuid'"
-    
-    if [ -z "$recipe_uuid" ] || [ "$recipe_uuid" = "null" ]; then
-        log_error "Recipe not found: $RECIPE_NAME"
-        log_error "Available recipes:"
-        gmsaas recipes list | head -10
-        log_error "Raw JSON search for debugging:"
-        echo "$recipes_output" | jq -r '.[] | "\(.name) -> \(.uuid)"' | head -5
-        exit 1
-    fi
-    
-    log_info "✓ Found recipe UUID: $recipe_uuid"
-    echo "$recipe_uuid"
-}
-
 # Create new instance
 create_instance() {
     log_info "Creating new Genymotion Cloud instance..."
-    log_info "Recipe: $RECIPE_NAME"
+    log_info "Recipe: Samsung Galaxy S23"
     log_info "Name: $DEVICE_NAME"
     
-    # Get recipe UUID first
-    local recipe_uuid
-    recipe_uuid=$(find_recipe_uuid)
+    # Hardcoded Samsung Galaxy S23 UUID (known working)
+    local recipe_uuid="37499e5d-6bee-46d1-b07a-e594ff3fcb0d"
+    log_info "Using recipe UUID: $recipe_uuid"
     
-    # Start new instance with UUID (not name)
+    # Start new instance with UUID
     log_info "Starting instance: gmsaas instances start $recipe_uuid $DEVICE_NAME"
     local start_output
     start_output=$(gmsaas instances start "$recipe_uuid" "$DEVICE_NAME" 2>&1)
