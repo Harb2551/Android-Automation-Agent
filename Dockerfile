@@ -120,7 +120,9 @@ RUN pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted
     selenium \
     # Utilities
     python-dotenv \
-    pyyaml
+    pyyaml \
+    # Genymotion Cloud CLI
+    gmsaas
 
 # ===== INFRASTRUCTURE SCRIPTS =====
 

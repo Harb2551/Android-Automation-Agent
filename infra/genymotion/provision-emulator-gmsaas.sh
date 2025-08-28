@@ -49,15 +49,21 @@ check_dependencies() {
 authenticate_gmsaas() {
     log_info "Authenticating with Genymotion API..."
     
-    if [ -z "$GENYMOTION_API_KEY" ]; then
-        log_error "GENYMOTION_API_KEY environment variable not set"
-        log_error "Set it with: export GENYMOTION_API_KEY='your_key_here'"
+    if [ -z "$GENYMOTION_API_TOKEN" ]; then
+        log_error "GENYMOTION_API_TOKEN environment variable not set"
+        log_error "Set it with: export GENYMOTION_API_TOKEN='your_token_here'"
+        exit 1
+    fi
+    
+    # Authenticate using gmsaas auth token command
+    if ! gmsaas auth token "$GENYMOTION_API_TOKEN" >/dev/null 2>&1; then
+        log_error "gmsaas authentication failed. Check your API token."
         exit 1
     fi
     
     # Test authentication by listing instances
     if ! gmsaas instances list >/dev/null 2>&1; then
-        log_error "gmsaas authentication failed. Check your API key."
+        log_error "gmsaas authentication test failed."
         exit 1
     fi
     

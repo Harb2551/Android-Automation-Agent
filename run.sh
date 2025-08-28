@@ -16,7 +16,7 @@ CONFIG_FILE="${CONFIG_FILE:-infra/genymotion/device-configs/core-apps-config.yam
 APP_MAPPING_FILE="${APP_MAPPING_FILE:-infra/apps/app-mapping.yaml}"
 
 # Genymotion Cloud settings (required for provision operations)
-GENYMOTION_API_KEY="${GENYMOTION_API_KEY:-}"
+GENYMOTION_API_TOKEN="${GENYMOTION_API_TOKEN:-}"
 
 # ADB settings
 ADB_DEVICE="${ADB_DEVICE:-}"  # Auto-detect if empty
@@ -95,7 +95,7 @@ show_usage() {
     echo "  --help          Show this help message"
     echo ""
     echo "Environment Variables:"
-    echo "  GENYMOTION_API_KEY     Genymotion Cloud API key (required)"
+    echo "  GENYMOTION_API_TOKEN   Genymotion Cloud API token (required)"
     echo "  CONFIG_FILE            Device configuration YAML"
     echo "  ADB_DEVICE             Specific ADB device to use"
     echo "  ANDROID_WORLD_AGENT    Agent type (m3a, t3a, seeact)"
@@ -134,15 +134,15 @@ provision_device() {
     
     log_info "===== PROVISIONING GENYMOTION CLOUD DEVICE ====="
     
-    # Check for API key
-    if [ -z "$GENYMOTION_API_KEY" ]; then
-        log_error "GENYMOTION_API_KEY environment variable is required"
-        log_error "Export your API key: export GENYMOTION_API_KEY='your_key_here'"
+    # Check for API token
+    if [ -z "$GENYMOTION_API_TOKEN" ]; then
+        log_error "GENYMOTION_API_TOKEN environment variable is required"
+        log_error "Export your API token: export GENYMOTION_API_TOKEN='your_token_here'"
         exit 1
     fi
     
-    # Export API key for provisioning script
-    export GENYMOTION_API_KEY="$GENYMOTION_API_KEY"
+    # Export API token for provisioning script
+    export GENYMOTION_API_TOKEN="$GENYMOTION_API_TOKEN"
     
     # Make provisioning script executable and run it
     chmod +x ./infra/genymotion/provision-emulator-gmsaas.sh
@@ -379,20 +379,14 @@ cleanup_resources() {
         genymotion_instance_id=$(grep "GENYMOTION_INSTANCE_ID=" /tmp/genymotion_connection.env | cut -d'=' -f2 | tr -d '"')
     fi
     
-    # Cleanup Genymotion instance if we created one
-    if [ -n "$genymotion_instance_id" ] && [ -n "$GENYMOTION_API_KEY" ]; then
+    # Cleanup Genymotion instance if we created one using gmsaas CLI
+    if [ -n "$genymotion_instance_id" ]; then
         log_info "Deleting Genymotion Cloud instance: $genymotion_instance_id"
-        
-        curl -s --insecure -X DELETE \
-            -H "x-api-token: $GENYMOTION_API_KEY" \
-            "https://api.geny.io/cloud/v1/instances/$genymotion_instance_id" > /dev/null || \
+        gmsaas instances stop "$genymotion_instance_id" >/dev/null 2>&1 || \
             log_warn "Failed to delete Genymotion instance (may need manual cleanup)"
-    elif [ -n "$GENYMOTION_INSTANCE_ID" ] && [ -n "$GENYMOTION_API_KEY" ]; then
+    elif [ -n "$GENYMOTION_INSTANCE_ID" ]; then
         log_info "Deleting Genymotion Cloud instance: $GENYMOTION_INSTANCE_ID"
-        
-        curl -s --insecure -X DELETE \
-            -H "x-api-token: $GENYMOTION_API_KEY" \
-            "https://api.geny.io/cloud/v1/instances/$GENYMOTION_INSTANCE_ID" > /dev/null || \
+        gmsaas instances stop "$GENYMOTION_INSTANCE_ID" >/dev/null 2>&1 || \
             log_warn "Failed to delete Genymotion instance (may need manual cleanup)"
     fi
     
