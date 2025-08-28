@@ -222,18 +222,20 @@ EOF
     fi
     
     # Container-specific ADB setup for macOS host (Docker Desktop)
-    log_info "Setting up container ADB connection to host gmsaas tunnel on port 5555..."
+    log_info "Setting up container ADB connection to host ADB server..."
     
     # Kill container's ADB server to avoid conflicts
     log_info "Killing container's ADB server..."
     adb kill-server >/dev/null 2>&1 || true
     
-    # Connect to port 5555 on host
-    log_info "Connecting to host gmsaas tunnel at host.docker.internal:5555"
-    adb connect "host.docker.internal:5555"
+    # Set environment to connect to host ADB server
+    export ANDROID_ADB_SERVER_ADDRESS="host.docker.internal"
+    export ANDROID_ADB_SERVER_PORT=5037
+    log_info "Set ANDROID_ADB_SERVER_ADDRESS=host.docker.internal"
+    log_info "Set ANDROID_ADB_SERVER_PORT=5037"
     
-    # Check for devices after connection
-    log_info "Checking for ADB devices..."
+    # Check what devices the host ADB server has
+    log_info "Checking devices from host ADB server..."
     local devices
     devices=$(adb devices 2>&1)
     local adb_devices_exit_code=$?
