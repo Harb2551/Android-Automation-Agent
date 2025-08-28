@@ -222,25 +222,15 @@ EOF
     fi
     
     # Container-specific ADB setup for macOS host (Docker Desktop)
-    # Following official Genymotion approach for containers
-    log_info "Setting up container ADB connection to host gmsaas tunnel..."
-    
-    # Check for ADB_HOST_PORT environment variable
-    if [ -z "$ADB_HOST_PORT" ]; then
-        log_error "ADB_HOST_PORT environment variable not set"
-        log_error "Please set it when running the container:"
-        log_error "  docker-compose run -e ADB_HOST_PORT=60561 android-world"
-        log_error "Or add it to docker-compose.yml environment section"
-        exit 1
-    fi
+    log_info "Setting up container ADB connection to host gmsaas tunnel on port 5555..."
     
     # Kill container's ADB server to avoid conflicts
     log_info "Killing container's ADB server..."
     adb kill-server >/dev/null 2>&1 || true
     
-    # Connect to the specific port provided
-    log_info "Connecting to host gmsaas tunnel at host.docker.internal:$ADB_HOST_PORT"
-    adb connect "host.docker.internal:$ADB_HOST_PORT"
+    # Connect to port 5555 on host
+    log_info "Connecting to host gmsaas tunnel at host.docker.internal:5555"
+    adb connect "host.docker.internal:5555"
     
     # Check for devices after connection
     log_info "Checking for ADB devices..."
@@ -280,7 +270,7 @@ EOF
     log_error "Please establish gmsaas connection on host first:"
     log_error "  1. gmsaas auth token <your_token>"
     log_error "  2. gmsaas instances start <recipe_uuid> <name>"
-    log_error "  3. gmsaas instances adbconnect <instance_id>"
+    log_error "  3. gmsaas instances adbconnect --adb-serial-port 5555 <instance_id>"
     log_error "  4. Then run this container"
     exit 1
 }
