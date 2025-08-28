@@ -237,14 +237,14 @@ connect_adb() {
     while [ $adb_attempt -le $max_adb_attempts ]; do
         log_info "ADB connection attempt $adb_attempt/$max_adb_attempts..."
         
-        # Temporarily disable exit on error to capture full debug info
-        set +e
+        # Aggressive cleanup of ADB processes
+        adb kill-server > /dev/null 2>&1 || true
+        adb start-server > /dev/null 2>&1 || true
         
+        set +e
         adb_endpoint=$(gmsaas instances adbconnect "$INSTANCE_ID" 2>&1)
         adb_connect_exit_code=$?
-        
-        # Re-enable exit on error
-        # set -e
+        set -e
         
         log_info "gmsaas instances adbconnect exit code: $adb_connect_exit_code"
         log_info "ADB connection output: '$adb_endpoint'"
