@@ -201,6 +201,8 @@ wait_for_online() {
         
         if [ "$status" = "ONLINE" ]; then
             log_info "✓ Instance is ONLINE!"
+            log_info "Waiting 45 seconds for ADB services to fully initialize..."
+            sleep 45
             return 0
         fi
         
