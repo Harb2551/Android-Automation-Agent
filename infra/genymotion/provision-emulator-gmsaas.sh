@@ -104,11 +104,30 @@ authenticate_gmsaas() {
     log_info "Authentication successful"
 }
 
-# Check for existing instances
+# Check for existing instances or ADB connections
 check_existing_instance() {
     log_info "Checking for existing instances..."
     
-    # gmsaas instances list format: UUID  NAME  ADB SERIAL  STATE
+    # First check if ADB devices are already available (from host)
+    local existing_devices
+    existing_devices=$(adb devices 2>/dev/null | grep -E "device$|emulator$" | head -1)
+    
+    if [ -n "$existing_devices" ]; then
+        local device_serial
+        device_serial=$(echo "$existing_devices" | awk '{print $1}')
+        log_info "Found existing ADB device: $device_serial"
+        log_info "Skipping instance provisioning - using existing connection"
+        
+        # Create mock connection info for existing device
+        cat > /tmp/genymotion_connection.env << EOF
+GENYMOTION_INSTANCE_ID="host-managed"
+GENYMOTION_ADB_DEVICE="$device_serial"
+GENYMOTION_CONNECTION_TYPE="gmsaas"
+EOF
+        return 0
+    fi
+    
+    # Check gmsaas instances if no ADB devices found
     local instances_output
     instances_output=$(gmsaas instances list 2>/dev/null | tail -n +2)  # Skip header line
     
@@ -121,7 +140,7 @@ check_existing_instance() {
         return 0
     fi
     
-    log_info "No existing ONLINE instance found"
+    log_info "No existing ONLINE instance or ADB device found"
     return 1
 }
 
