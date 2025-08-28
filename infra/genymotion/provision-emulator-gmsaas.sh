@@ -201,10 +201,6 @@ wait_for_online() {
         
         if [ "$status" = "ONLINE" ]; then
             log_info "✓ Instance is ONLINE!"
-            
-            # Give additional time for the instance to be fully ready for ADB
-            log_info "Waiting additional 30 seconds for instance to be ADB-ready..."
-            sleep 30
             return 0
         fi
         
