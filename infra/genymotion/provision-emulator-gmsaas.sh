@@ -217,22 +217,46 @@ connect_adb() {
     log_info "Starting ADB tunnel service..."
     
     # First start the ADB service (like we did manually)
-    gmsaas adb start >/dev/null 2>&1
+    local adb_start_output
+    adb_start_output=$(gmsaas adb start 2>&1)
+    local adb_start_exit_code=$?
+    
+    log_info "gmsaas adb start exit code: $adb_start_exit_code"
+    log_info "gmsaas adb start output: $adb_start_output"
+    
     sleep 2
     
     log_info "Connecting ADB to instance $INSTANCE_ID..."
     
     # Use gmsaas instances adbconnect to connect to specific instance
     local adb_endpoint
-    adb_endpoint=$(gmsaas instances adbconnect "$INSTANCE_ID" 2>&1)
+    local adb_connect_exit_code
     
-    log_info "ADB tunnel created: $adb_endpoint"
+    adb_endpoint=$(gmsaas instances adbconnect "$INSTANCE_ID" 2>&1)
+    adb_connect_exit_code=$?
+    
+    log_info "gmsaas instances adbconnect exit code: $adb_connect_exit_code"
+    log_info "ADB connection output: $adb_endpoint"
+    
+    if [ $adb_connect_exit_code -ne 0 ]; then
+        log_error "gmsaas instances adbconnect failed"
+        log_error "Command: gmsaas instances adbconnect $INSTANCE_ID"
+        log_error "Exit code: $adb_connect_exit_code"
+        log_error "Output: $adb_endpoint"
+        exit 1
+    fi
+    
+    log_info "ADB tunnel created successfully: $adb_endpoint"
     
     # Verify ADB connection
-    sleep 3
-    local devices
-    devices=$(adb devices 2>/dev/null)
+    log_info "Waiting for ADB connection to stabilize..."
+    sleep 5
     
+    local devices
+    devices=$(adb devices 2>&1)
+    local adb_devices_exit_code=$?
+    
+    log_info "adb devices exit code: $adb_devices_exit_code"
     log_info "ADB devices output:"
     echo "$devices"
     
@@ -254,7 +278,8 @@ EOF
         return 0
     else
         log_error "ADB connection failed - no devices found"
-        log_error "ADB devices output: $devices"
+        log_error "Full adb devices output: $devices"
+        log_error "Expected device line with 'device$' not found"
         exit 1
     fi
 }
