@@ -151,18 +151,24 @@ find_recipe_uuid() {
     local recipes_output
     recipes_output=$(gmsaas recipes list --format json 2>/dev/null)
     
+    log_info "Recipes API response (first 500 chars): $(echo "$recipes_output" | head -c 500)"
+    
     local recipe_uuid
     recipe_uuid=$(echo "$recipes_output" | jq -r --arg recipe "$RECIPE_NAME" \
         '.[] | select(.name == $recipe) | .uuid' | head -1)
+    
+    log_info "jq search result: '$recipe_uuid'"
     
     if [ -z "$recipe_uuid" ] || [ "$recipe_uuid" = "null" ]; then
         log_error "Recipe not found: $RECIPE_NAME"
         log_error "Available recipes:"
         gmsaas recipes list | head -10
+        log_error "Raw JSON search for debugging:"
+        echo "$recipes_output" | jq -r '.[] | "\(.name) -> \(.uuid)"' | head -5
         exit 1
     fi
     
-    log_info "Found recipe UUID: $recipe_uuid"
+    log_info "✓ Found recipe UUID: $recipe_uuid"
     echo "$recipe_uuid"
 }
 
