@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Genymotion Cloud Android Emulator Provisioning Script
+# Genymotion Cloud Android Emulator Provisioning Script (gmsaas CLI)
 # Creates and configures Genymotion Cloud instances for android_world testing
 
 set -e  # Exit on any error
@@ -10,18 +10,17 @@ set -e  # Exit on any error
 
 # Device Configuration
 CONFIG_FILE="infra/genymotion/device-configs/core-apps-config.yaml"  # Change this to switch configs
-DEVICE_NAME="AndroidWorld_CoreApps"
+DEVICE_NAME="AndroidWorld-Test"
 GENYMOTION_REGION="us-east-1"
 
-# API Configuration
-GENYMOTION_API_ENDPOINT="https://api.geny.io/cloud"
+# gmsaas CLI Configuration
 # Set your API key as environment variable: export GENYMOTION_API_KEY="your_key_here"
 
 # Timeouts and Retry Settings
 BOOT_TIMEOUT=300          # 5 minutes to wait for device boot
 CONNECTION_TIMEOUT=60     # 1 minute for ADB connection
 POLL_INTERVAL=10         # Check status every 10 seconds
-MAX_RETRIES=3            # Maximum retry attempts for API calls
+MAX_RETRIES=3            # Maximum retry attempts
 
 # Debug Settings
 DEBUG_MODE=true         # Set to true for verbose output
@@ -114,7 +113,7 @@ validate_api_connection() {
     
     if [ -z "$GENYMOTION_API_KEY" ]; then
         log_error "GENYMOTION_API_KEY environment variable is not set"
-        log_error "Please set it with: export GENYMOTION_API_KEY='your_api_key_here'"
+        log_error "Please set it with: export GENYMOTION_API_KEY='your_key_here'"
         exit 1
     fi
     
@@ -390,12 +389,12 @@ wait_for_instance_online() {
                 log_info "TCP ADB Port: $tcp_adb_port"
                 log_info "Instance Host: $instance_host"
                 
-                # Prefer TCP ADB over WebSocket for android_world compatibility
+                # Prefer TCP ADB over WebSocket for direct compatibility
                 if [[ -n "$tcp_adb_port" && "$tcp_adb_port" != "null" && -n "$instance_host" && "$instance_host" != "null" ]]; then
                     INSTANCE_IP="$instance_host"
                     ADB_PORT="$tcp_adb_port"
                     log_info "Using TCP ADB connection: $INSTANCE_IP:$ADB_PORT"
-                    log_info "TCP ADB provides full compatibility with android_world"
+                    log_info "TCP ADB provides direct android_world compatibility"
                     
                     # Save TCP connection details for android_world
                     cat > /tmp/genymotion_connection.env << EOF
@@ -408,21 +407,22 @@ GENYMOTION_WEBSOCKET_URL="$adb_url"
 EOF
                     
                 elif [[ -n "$adb_url" && "$adb_url" != "null" ]]; then
-                    log_warn "TCP ADB port not available, falling back to WebSocket ADB"
+                    log_warn "TCP ADB port not available, using WebSocket ADB"
                     
-                    # Handle WebSocket URLs as fallback
+                    # Handle WebSocket URLs
                     if [[ "$adb_url" =~ wss://([^/]+)/([0-9]+) ]]; then
                         INSTANCE_IP="${BASH_REMATCH[1]}"
                         ADB_PORT="${BASH_REMATCH[2]}"
-                        log_info "WebSocket ADB fallback - Host: $INSTANCE_IP, Port: $ADB_PORT"
+                        log_info "WebSocket ADB connection - Host: $INSTANCE_IP, Port: $ADB_PORT"
                         
-                        # Save WebSocket connection info for Docker containers
+                        # Save WebSocket connection info for containers
                         cat > /tmp/genymotion_connection.env << EOF
 GENYMOTION_INSTANCE_ID="$INSTANCE_ID"
 GENYMOTION_ADB_URL="$adb_url"
 GENYMOTION_HOST="$INSTANCE_IP"
 GENYMOTION_PORT="$ADB_PORT"
 GENYMOTION_CONNECTION_TYPE="websocket"
+GENYMOTION_WEBSOCKET_URL="$adb_url"
 EOF
                         
                     else
@@ -476,14 +476,13 @@ connect_adb() {
     # Check connection type from saved environment
     local connection_type="tcp"  # Default to TCP
     if [ -f "/tmp/genymotion_connection.env" ]; then
-        connection_type=$(grep "GENYMOTION_CONNECTION_TYPE=" /tmp/genymotion_connection.env | cut -d'=' -f2)
+        connection_type=$(grep "GENYMOTION_CONNECTION_TYPE=" /tmp/genymotion_connection.env | cut -d'=' -f2 | tr -d '"')
     fi
     
     log_info "Connection type: $connection_type"
     
     if [ "$connection_type" = "websocket" ]; then
-        log_info "WebSocket ADB detected - Skipping direct ADB connection"
-        log_info "WebSocket requires special handling in Docker container"
+        log_info "WebSocket ADB detected - will be handled by android_world"
         log_info "Connection details saved to: /tmp/genymotion_connection.env"
         return 0
     fi
@@ -491,54 +490,17 @@ connect_adb() {
     # TCP ADB connection (preferred for android_world)
     log_info "Connecting TCP ADB to $INSTANCE_IP:$ADB_PORT..."
     
-    # First test network connectivity to diagnose firewall issues
-    log_info "Testing network connectivity..."
-    log_info "Testing HTTPS (port 443) - should work through corporate firewall:"
-    if timeout 5 bash -c "</dev/tcp/$INSTANCE_IP/443" 2>/dev/null; then
-        log_info "✓ HTTPS port 443 is accessible"
-    else
-        log_warn "✗ HTTPS port 443 is blocked"
-    fi
-    
-    log_info "Testing TCP ADB port $ADB_PORT connectivity:"
-    if timeout 5 bash -c "</dev/tcp/$INSTANCE_IP/$ADB_PORT" 2>/dev/null; then
+    # Test TCP ADB connectivity
+    log_info "Testing TCP ADB connectivity..."
+    if timeout 10 bash -c "</dev/tcp/$INSTANCE_IP/$ADB_PORT" 2>/dev/null; then
         log_info "✓ TCP ADB port $ADB_PORT is accessible"
     else
-        log_warn "✗ TCP ADB port $ADB_PORT connection failed"
-        log_warn "This may be due to network restrictions or firewall"
+        log_warn "TCP ADB port $ADB_PORT not accessible (firewall/network restriction)"
         log_warn "Falling back to WebSocket ADB connection"
         
         # Update connection type to websocket as fallback
         if [ -f "/tmp/genymotion_connection.env" ]; then
-            # Update connection type
             sed -i 's/GENYMOTION_CONNECTION_TYPE="tcp"/GENYMOTION_CONNECTION_TYPE="websocket"/' /tmp/genymotion_connection.env
-            
-            # Get current instance status to retrieve WebSocket URL
-            local current_status
-            current_status=$(curl -s --insecure -H "x-api-token: $GENYMOTION_API_KEY" \
-                "$GENYMOTION_API_ENDPOINT/v1/instances/$INSTANCE_ID")
-            
-            local websocket_adb_url
-            websocket_adb_url=$(echo "$current_status" | jq -r '.adb_url // .publicAdbUrl // empty')
-            
-            if [ -n "$websocket_adb_url" ] && [[ "$websocket_adb_url" =~ ^wss:// ]]; then
-                # Add or update WebSocket URL in environment file
-                if grep -q "GENYMOTION_WEBSOCKET_URL=" /tmp/genymotion_connection.env; then
-                    sed -i "s|GENYMOTION_WEBSOCKET_URL=.*|GENYMOTION_WEBSOCKET_URL=\"$websocket_adb_url\"|" /tmp/genymotion_connection.env
-                else
-                    echo "GENYMOTION_WEBSOCKET_URL=\"$websocket_adb_url\"" >> /tmp/genymotion_connection.env
-                fi
-                
-                # Also update ADB_URL to point to WebSocket
-                if grep -q "GENYMOTION_ADB_URL=" /tmp/genymotion_connection.env; then
-                    sed -i "s|GENYMOTION_ADB_URL=.*|GENYMOTION_ADB_URL=\"$websocket_adb_url\"|" /tmp/genymotion_connection.env
-                else
-                    echo "GENYMOTION_ADB_URL=\"$websocket_adb_url\"" >> /tmp/genymotion_connection.env
-                fi
-                
-                log_info "Updated WebSocket ADB URL: $websocket_adb_url"
-            fi
-            
             log_info "Updated connection type to websocket due to connectivity issues"
         fi
         return 0
@@ -570,35 +532,7 @@ connect_adb() {
             
             # Update connection type to websocket
             if [ -f "/tmp/genymotion_connection.env" ]; then
-                # Update connection type
                 sed -i 's/GENYMOTION_CONNECTION_TYPE="tcp"/GENYMOTION_CONNECTION_TYPE="websocket"/' /tmp/genymotion_connection.env
-                
-                # Get current instance status to retrieve WebSocket URL
-                local current_status
-                current_status=$(curl -s --insecure -H "x-api-token: $GENYMOTION_API_KEY" \
-                    "$GENYMOTION_API_ENDPOINT/v1/instances/$INSTANCE_ID")
-                
-                local websocket_adb_url
-                websocket_adb_url=$(echo "$current_status" | jq -r '.adb_url // .publicAdbUrl // empty')
-                
-                if [ -n "$websocket_adb_url" ] && [[ "$websocket_adb_url" =~ ^wss:// ]]; then
-                    # Add or update WebSocket URL in environment file
-                    if grep -q "GENYMOTION_WEBSOCKET_URL=" /tmp/genymotion_connection.env; then
-                        sed -i "s|GENYMOTION_WEBSOCKET_URL=.*|GENYMOTION_WEBSOCKET_URL=\"$websocket_adb_url\"|" /tmp/genymotion_connection.env
-                    else
-                        echo "GENYMOTION_WEBSOCKET_URL=\"$websocket_adb_url\"" >> /tmp/genymotion_connection.env
-                    fi
-                    
-                    # Also update ADB_URL to point to WebSocket
-                    if grep -q "GENYMOTION_ADB_URL=" /tmp/genymotion_connection.env; then
-                        sed -i "s|GENYMOTION_ADB_URL=.*|GENYMOTION_ADB_URL=\"$websocket_adb_url\"|" /tmp/genymotion_connection.env
-                    else
-                        echo "GENYMOTION_ADB_URL=\"$websocket_adb_url\"" >> /tmp/genymotion_connection.env
-                    fi
-                    
-                    log_info "Updated WebSocket ADB URL: $websocket_adb_url"
-                fi
-                
                 log_info "Updated connection type to websocket"
             fi
             return 0
@@ -621,7 +555,7 @@ configure_device() {
     # Check connection type from saved environment
     local connection_type="tcp"  # Default to TCP
     if [ -f "/tmp/genymotion_connection.env" ]; then
-        connection_type=$(grep "GENYMOTION_CONNECTION_TYPE=" /tmp/genymotion_connection.env | cut -d'=' -f2)
+        connection_type=$(grep "GENYMOTION_CONNECTION_TYPE=" /tmp/genymotion_connection.env | cut -d'=' -f2 | tr -d '"')
     fi
     
     if [ "$connection_type" = "websocket" ]; then
@@ -699,7 +633,7 @@ output_connection_info() {
     # Check connection type from saved environment
     local connection_type="tcp"  # Default to TCP
     if [ -f "/tmp/genymotion_connection.env" ]; then
-        connection_type=$(grep "GENYMOTION_CONNECTION_TYPE=" /tmp/genymotion_connection.env | cut -d'=' -f2)
+        connection_type=$(grep "GENYMOTION_CONNECTION_TYPE=" /tmp/genymotion_connection.env | cut -d'=' -f2 | tr -d '"')
     fi
     
     echo ""
@@ -717,14 +651,14 @@ output_connection_info() {
         echo ""
         echo "This TCP connection provides full android_world compatibility!"
     else
-        echo "WEBSOCKET ADB CONNECTION (requires bridge)"
+        echo "WEBSOCKET ADB CONNECTION (requires bridge or modification)"
         echo "WebSocket ADB requires special handling in containers."
         echo ""
         echo "For Docker containers:"
         echo "  source /tmp/genymotion_connection.env"
-        echo "  # Use GENYMOTION_WEBSOCKET_URL for bridge setup"
+        echo "  # Use GENYMOTION_WEBSOCKET_URL for WebSocket connections"
         echo ""
-        echo "Note: WebSocket ADB may have compatibility issues with android_world"
+        echo "Note: WebSocket ADB may need android_world modifications for compatibility"
     fi
     
     echo ""
@@ -737,7 +671,7 @@ output_connection_info() {
     if [ "$connection_type" = "tcp" ]; then
         log_info "Ready for android_world testing with TCP ADB!"
     else
-        log_warn "WebSocket ADB detected - may need additional setup for android_world"
+        log_warn "WebSocket ADB detected - may need android_world modifications"
     fi
 }
 

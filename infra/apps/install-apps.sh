@@ -107,28 +107,42 @@ detect_adb_device() {
         return
     fi
     
-    # Check for WebSocket connection first
+    # Check for Genymotion connection (WebSocket or TCP)
     if [ -f "/tmp/genymotion_connection.env" ]; then
-        log_info "Genymotion WebSocket connection detected"
+        log_info "Genymotion connection detected"
         
         # Source the connection environment
         source /tmp/genymotion_connection.env
         
-        if [[ "$GENYMOTION_ADB_URL" =~ wss:// ]]; then
-            log_info "WebSocket ADB connection detected: $GENYMOTION_ADB_URL"
-            log_info "Checking for WebSocket-to-TCP ADB bridge..."
+        local connection_type="${GENYMOTION_CONNECTION_TYPE:-websocket}"
+        
+        if [ "$connection_type" = "tcp" ]; then
+            log_info "✓ TCP ADB connection available"
             
-            # Check if bridge is available (localhost:5555)
+            # Use TCP ADB connection details
+            if [ -n "$GENYMOTION_HOST" ] && [ -n "$GENYMOTION_TCP_PORT" ]; then
+                ADB_DEVICE="$GENYMOTION_HOST:$GENYMOTION_TCP_PORT"
+                log_info "Using TCP ADB device: $ADB_DEVICE"
+                
+                # Connect to TCP ADB
+                if adb connect "$ADB_DEVICE" >/dev/null 2>&1; then
+                    log_info "✓ TCP ADB connected successfully"
+                    return 0
+                fi
+            fi
+        elif [ "$connection_type" = "websocket" ]; then
+            log_info "✓ WebSocket ADB detected - using bridge"
+            
+            # Check if WebSocket bridge is already running
             if adb devices | grep -q "localhost:5555"; then
-                log_info "✓ WebSocket ADB bridge found - using localhost:5555"
+                log_info "✓ WebSocket bridge found - using localhost:5555"
                 ADB_DEVICE="localhost:5555"
                 log_info "Using WebSocket bridge ADB device: $ADB_DEVICE"
-                return 0  # Return early - device is set, no need for auto-detection
+                return 0
             else
-                log_warn "WebSocket-to-TCP bridge not found"
-                log_warn "WebSocket ADB requires bridge setup for app installation"
-                log_warn "Skipping app installation - bridge should be started first"
-                exit 0
+                log_warn "WebSocket bridge not found"
+                log_warn "WebSocket bridge should be started by main script"
+                log_warn "Attempting to use existing ADB devices..."
             fi
         fi
     fi
@@ -145,11 +159,11 @@ detect_adb_device() {
         log_error "2. ADB is connected (adb connect IP:PORT)"
         log_error "3. Device is authorized"
         
-        # Additional guidance for WebSocket connections
+        # Additional guidance for connection issues
         if [ -f "/tmp/genymotion_connection.env" ]; then
             log_error ""
-            log_error "Note: WebSocket ADB connections (wss://) are detected"
-            log_error "WebSocket ADB requires special handling not supported by standard adb commands"
+            log_error "Connection file found but no TCP ADB devices available"
+            log_error "This may indicate network connectivity issues or device problems"
         fi
         
         exit 1
@@ -180,11 +194,11 @@ validate_adb_connection() {
     # For WebSocket bridge connections, wait for device to become ready
     log_info "Waiting for device to become ready (may need authorization)..."
     
-    # Use adb wait-for-device with timeout
-    if timeout 30 adb -s "$ADB_DEVICE" wait-for-device; then
+    # Use adb wait-for-device with extended timeout for WebSocket bridge authorization
+    if timeout 60 adb -s "$ADB_DEVICE" wait-for-device; then
         log_info "✓ Device is now ready"
     else
-        log_warn "Device didn't become ready within 30 seconds, trying anyway..."
+        log_warn "Device didn't become ready within 60 seconds, checking status..."
     fi
     
     # Show updated ADB status

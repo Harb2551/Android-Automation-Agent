@@ -84,17 +84,20 @@ class WebSocketADBBridge:
     
     async def handle_client(self, client_socket):
         """Handle individual ADB client connection"""
+        logger.info(f"Handling new ADB client connection")
         try:
             self.clients.append(client_socket)
-            client_socket.settimeout(0.1)  # Non-blocking
+            client_socket.settimeout(5.0)  # Longer timeout for handshake
             
             while self.running and self.websocket:
                 try:
-                    # Read from ADB client
-                    data = client_socket.recv(4096)
+                    # Read from ADB client (non-blocking)
+                    data = client_socket.recv(8192)
                     if not data:
+                        logger.debug("Client disconnected")
                         break
                         
+                    logger.debug(f"Client->WebSocket: {len(data)} bytes")
                     # Forward to WebSocket
                     await self.websocket.send(data)
                     
@@ -111,6 +114,7 @@ class WebSocketADBBridge:
                 client_socket.close()
                 if client_socket in self.clients:
                     self.clients.remove(client_socket)
+                logger.debug("Client connection closed")
             except:
                 pass
     
@@ -120,13 +124,19 @@ class WebSocketADBBridge:
             while self.running and self.websocket:
                 try:
                     # Receive from WebSocket
-                    message = await asyncio.wait_for(self.websocket.recv(), timeout=1.0)
+                    message = await asyncio.wait_for(self.websocket.recv(), timeout=2.0)
+                    
+                    if self.clients:
+                        logger.debug(f"WebSocket->Clients: {len(message)} bytes to {len(self.clients)} clients")
                     
                     # Forward to all ADB clients
                     for client_socket in self.clients[:]:  # Copy to avoid modification during iteration
                         try:
+                            # Use non-blocking send
+                            client_socket.settimeout(0.5)
                             client_socket.send(message)
-                        except:
+                        except Exception as e:
+                            logger.debug(f"Failed to send to client: {e}")
                             # Remove dead connections
                             try:
                                 self.clients.remove(client_socket)

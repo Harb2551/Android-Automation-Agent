@@ -9,7 +9,7 @@ set -e  # Exit on any error
 # Edit these variables to customize your setup
 
 # Operation mode
-OPERATION_MODE="provision_and_test"  # provision_only, install_apps_only, test_only, provision_and_test
+OPERATION_MODE="full_workflow"  # provision_only, install_apps_only, test_only, full_workflow
 
 # Configuration files
 CONFIG_FILE="${CONFIG_FILE:-infra/genymotion/device-configs/core-apps-config.yaml}"
@@ -125,7 +125,7 @@ initialize_environment() {
     log_debug "Output Directory: $ANDROID_WORLD_OUTPUT_DIR"
 }
 
-# Provision Genymotion Cloud device
+# Provision Genymotion Cloud device using gmsaas CLI
 provision_device() {
     if [ "$PROVISION_DEVICE" != true ]; then
         log_info "Skipping device provisioning (disabled)"
@@ -144,136 +144,52 @@ provision_device() {
     # Export API key for provisioning script
     export GENYMOTION_API_KEY="$GENYMOTION_API_KEY"
     
-    # Run provisioning script
-    if ./infra/genymotion/provision-emulator.sh; then
+    # Make provisioning script executable and run it
+    chmod +x ./infra/genymotion/provision-emulator-gmsaas.sh
+    
+    # Run new gmsaas provisioning script
+    if ./infra/genymotion/provision-emulator-gmsaas.sh; then
         log_info "Device provisioning completed successfully"
-        
-        # Extract connection info from provisioning output
-        # Note: In a real implementation, the provisioning script would output
-        # connection details in a parseable format (JSON/YAML)
-        log_debug "Device should be available for ADB connection"
+        log_debug "Connection info saved to /tmp/genymotion_connection.env"
     else
         log_error "Device provisioning failed"
         exit 1
     fi
 }
 
-# Start WebSocket ADB bridge if needed
-start_websocket_bridge() {
+# Setup ADB connection using gmsaas
+setup_adb_connection() {
     # Check for Genymotion connection details
     if [ ! -f "/tmp/genymotion_connection.env" ]; then
-        log_debug "No Genymotion connection file found"
-        return 0
+        log_error "No Genymotion connection file found"
+        log_error "Device provisioning may have failed"
+        return 1
     fi
     
     # Source the connection environment
     source /tmp/genymotion_connection.env
     
     # Check connection type
-    local connection_type="${GENYMOTION_CONNECTION_TYPE:-tcp}"
+    local connection_type="${GENYMOTION_CONNECTION_TYPE:-gmsaas}"
     log_info "Detected connection type: $connection_type"
     
-    if [ "$connection_type" = "tcp" ]; then
-        log_info "TCP ADB connection - no bridge needed"
-        ADB_DEVICE="$GENYMOTION_HOST:$GENYMOTION_TCP_PORT"
-        return 0
-    elif [ "$connection_type" = "websocket" ]; then
-        log_info "WebSocket ADB detected - starting bridge for ADB compatibility"
+    if [ "$connection_type" = "gmsaas" ]; then
+        log_info "✓ gmsaas ADB connection established"
+        ADB_DEVICE="$GENYMOTION_ADB_DEVICE"
+        log_info "Using ADB device: $ADB_DEVICE"
         
-        # Check if bridge is already running
-        if [ -f "/tmp/websocket_bridge.pid" ]; then
-            local existing_pid
-            existing_pid=$(cat /tmp/websocket_bridge.pid)
-            if kill -0 "$existing_pid" 2>/dev/null; then
-                log_info "WebSocket bridge already running (PID: $existing_pid)"
-                ADB_DEVICE="localhost:5555"
-                return 0
-            fi
-        fi
-        
-        # Verify WebSocket URL is available
-        local websocket_url="${GENYMOTION_WEBSOCKET_URL:-}"
-        
-        # If not set, try to get from ADB_URL but ensure it's WebSocket format
-        if [ -z "$websocket_url" ] || [ "$websocket_url" = "null" ]; then
-            if [[ "${GENYMOTION_ADB_URL:-}" =~ ^wss:// ]]; then
-                websocket_url="$GENYMOTION_ADB_URL"
-            else
-                log_error "No WebSocket ADB URL found in connection environment"
-                log_error "Available URLs: GENYMOTION_ADB_URL=${GENYMOTION_ADB_URL:-none}, GENYMOTION_WEBSOCKET_URL=${GENYMOTION_WEBSOCKET_URL:-none}"
-                return 1
-            fi
-        fi
-        
-        # Validate WebSocket URL format
-        if [[ ! "$websocket_url" =~ ^wss:// ]]; then
-            log_error "Invalid WebSocket URL format: $websocket_url"
-            log_error "Expected WebSocket URL starting with wss://"
+        # Verify device is accessible
+        if adb devices | grep -q "$ADB_DEVICE.*device"; then
+            log_info "✓ ADB device verified and ready"
+            return 0
+        else
+            log_error "ADB device not accessible: $ADB_DEVICE"
             return 1
         fi
-        
-        log_info "Starting WebSocket-to-TCP ADB bridge..."
-        log_info "Bridge: $websocket_url -> localhost:5555"
-        
-        # Kill any existing ADB connections and bridges
-        adb kill-server 2>/dev/null || true
-        pkill -f "websocket-adb-bridge" 2>/dev/null || true
-        sleep 2
-        
-        # Set environment for bridge
-        export GENYMOTION_WEBSOCKET_URL="$websocket_url"
-        
-        # Start bridge
-        python3 /app/infra/websocket-bridge/websocket-adb-bridge.py > /tmp/websocket_bridge.log 2>&1 &
-        local bridge_pid=$!
-        
-        # Check if process started successfully
-        sleep 1
-        if ! kill -0 "$bridge_pid" 2>/dev/null; then
-            log_error "Failed to start WebSocket bridge process"
-            cat /tmp/websocket_bridge.log 2>/dev/null || echo "No bridge log available"
-            return 1
-        fi
-        
-        echo "$bridge_pid" > /tmp/websocket_bridge.pid
-        log_info "Bridge started with PID: $bridge_pid"
-        
-        # Wait for bridge to initialize
-        log_info "Waiting for bridge to initialize..."
-        sleep 8
-        
-        # Restart ADB and test connection
-        adb start-server
-        
-        local max_attempts=10
-        local attempt=1
-        local bridge_ready=false
-        
-        while [ $attempt -le $max_attempts ]; do
-            log_info "Testing bridge (attempt $attempt/$max_attempts)..."
-            
-            if adb connect localhost:5555 2>&1 | grep -q "connected\|already connected"; then
-                log_info "✓ WebSocket ADB bridge ready!"
-                ADB_DEVICE="localhost:5555"
-                bridge_ready=true
-                break
-            fi
-            
-            if ! kill -0 "$bridge_pid" 2>/dev/null; then
-                log_error "Bridge process died"
-                cat /tmp/websocket_bridge.log 2>/dev/null || echo "No bridge log"
-                return 1
-            fi
-            
-            sleep 3
-            ((attempt++))
-        done
-        
-        if [ "$bridge_ready" != "true" ]; then
-            log_error "Bridge failed to initialize"
-            kill "$bridge_pid" 2>/dev/null || true
-            return 1
-        fi
+    else
+        log_error "Unsupported connection type: $connection_type"
+        log_error "This version only supports gmsaas CLI connections"
+        return 1
     fi
 }
 
@@ -451,15 +367,10 @@ cleanup_resources() {
     
     log_info "===== CLEANING UP RESOURCES ====="
     
-    # Cleanup WebSocket ADB bridge if running
-    if [ -f "/tmp/websocket_bridge.pid" ]; then
-        local bridge_pid
-        bridge_pid=$(cat /tmp/websocket_bridge.pid)
-        if kill -0 "$bridge_pid" 2>/dev/null; then
-            log_info "Stopping WebSocket ADB bridge (PID: $bridge_pid)..."
-            kill "$bridge_pid" 2>/dev/null || true
-            rm -f /tmp/websocket_bridge.pid
-        fi
+    # Clean up any ADB connections
+    if [ -n "$ADB_DEVICE" ]; then
+        log_info "Disconnecting ADB device: $ADB_DEVICE"
+        adb disconnect "$ADB_DEVICE" 2>/dev/null || true
     fi
     
     # Get Genymotion instance ID from connection file if available
@@ -549,7 +460,7 @@ main() {
     
     # Execute workflow steps
     provision_device
-    start_websocket_bridge  # Start bridge early for both apps and tests
+    setup_adb_connection  # Setup gmsaas ADB connection
     install_applications
     grant_permissions
     run_android_world_tests
