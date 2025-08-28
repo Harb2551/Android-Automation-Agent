@@ -182,7 +182,7 @@ create_instance() {
     log_info "Instance created with ID: $INSTANCE_ID"
 }
 
-# Wait for instance to be online
+# Wait for instance to be online and fully ready
 wait_for_online() {
     log_info "Waiting for instance to come ONLINE..."
     
@@ -201,6 +201,10 @@ wait_for_online() {
         
         if [ "$status" = "ONLINE" ]; then
             log_info "✓ Instance is ONLINE!"
+            
+            # Give additional time for the instance to be fully ready for ADB
+            log_info "Waiting additional 30 seconds for instance to be ADB-ready..."
+            sleep 30
             return 0
         fi
         
@@ -226,37 +230,55 @@ connect_adb() {
     
     sleep 2
     
-    log_info "Connecting ADB to instance $INSTANCE_ID..."
+    log_info "Connecting ADB to instance $INSTANCE_ID with retry logic..."
     
-    # Temporarily disable exit on error to capture full debug info
-    set +e
-    
-    # Use gmsaas instances adbconnect to connect to specific instance
+    # Retry ADB connection multiple times as it may take time to be ready
+    local max_adb_attempts=5
+    local adb_attempt=1
     local adb_endpoint
     local adb_connect_exit_code
     
-    adb_endpoint=$(gmsaas instances adbconnect "$INSTANCE_ID" 2>&1)
-    adb_connect_exit_code=$?
-    
-    # Re-enable exit on error
-    set -e
-    
-    log_info "gmsaas instances adbconnect exit code: $adb_connect_exit_code"
-    log_info "ADB connection output: '$adb_endpoint'"
-    
-    if [ $adb_connect_exit_code -ne 0 ]; then
-        log_error "gmsaas instances adbconnect failed"
-        log_error "Command: gmsaas instances adbconnect $INSTANCE_ID"
-        log_error "Exit code: $adb_connect_exit_code"
-        log_error "Full output: '$adb_endpoint'"
+    while [ $adb_attempt -le $max_adb_attempts ]; do
+        log_info "ADB connection attempt $adb_attempt/$max_adb_attempts..."
         
-        # Try to get more diagnostic info
-        log_error "Running gmsaas doctor for diagnostics..."
-        gmsaas doctor || true
-        log_error "Checking instance status..."
-        gmsaas instances list || true
-        exit 1
-    fi
+        # Temporarily disable exit on error to capture full debug info
+        set +e
+        
+        adb_endpoint=$(gmsaas instances adbconnect "$INSTANCE_ID" 2>&1)
+        adb_connect_exit_code=$?
+        
+        # Re-enable exit on error
+        set -e
+        
+        log_info "gmsaas instances adbconnect exit code: $adb_connect_exit_code"
+        log_info "ADB connection output: '$adb_endpoint'"
+        
+        if [ $adb_connect_exit_code -eq 0 ]; then
+            log_info "✓ ADB connection successful on attempt $adb_attempt"
+            break
+        else
+            log_warn "ADB connection attempt $adb_attempt failed"
+            log_warn "Exit code: $adb_connect_exit_code"
+            log_warn "Output: '$adb_endpoint'"
+            
+            if [ $adb_attempt -eq $max_adb_attempts ]; then
+                log_error "All ADB connection attempts failed"
+                log_error "Final command: gmsaas instances adbconnect $INSTANCE_ID"
+                log_error "Final exit code: $adb_connect_exit_code"
+                log_error "Final output: '$adb_endpoint'"
+                
+                # Final diagnostics
+                log_error "Running final diagnostics..."
+                gmsaas doctor || true
+                gmsaas instances list || true
+                exit 1
+            else
+                log_info "Waiting 15 seconds before retry..."
+                sleep 15
+                ((adb_attempt++))
+            fi
+        fi
+    done
     
     log_info "ADB tunnel created successfully: $adb_endpoint"
     
