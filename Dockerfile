@@ -45,27 +45,22 @@ RUN mkdir -p ${ANDROID_HOME} && \
     wget --no-check-certificate https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip && \
     unzip tools.zip && \
     rm tools.zip && \
-    echo "=== DEBUG: What was extracted? ===" && \
-    ls -la && \
-    echo "=== DEBUG: Finding cmdline-tools ===" && \
-    find . -name "cmdline-tools" -type d && \
-    echo "=== DEBUG: Current structure ===" && \
-    ls -la cmdline-tools/ 2>/dev/null || echo "No cmdline-tools directory found" && \
-    echo "=== DEBUG: Setting up directory structure ===" && \
+    echo "=== Setting up cmdline-tools directory structure ===" && \
     if [ -d "cmdline-tools" ]; then \
         mv cmdline-tools temp-cmdline-tools && \
         mkdir -p cmdline-tools/latest && \
         mv temp-cmdline-tools/* cmdline-tools/latest/ && \
         rmdir temp-cmdline-tools; \
-    else \
-        echo "No cmdline-tools directory found, checking for extracted files"; \
-        ls -la; \
     fi && \
-    echo "=== DEBUG: Final structure ===" && \
-    ls -la cmdline-tools/latest/ 2>/dev/null || echo "Failed to create proper structure"
+    echo "=== Installing platform-tools via sdkmanager ===" && \
+    yes | cmdline-tools/latest/bin/sdkmanager --licenses && \
+    cmdline-tools/latest/bin/sdkmanager "platform-tools" && \
+    echo "=== Verifying installation ===" && \
+    ls -la platform-tools/ && \
+    ls -la platform-tools/adb
 
-# Update PATH to include cmdline-tools
-ENV PATH=${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin
+# Update PATH to include cmdline-tools and platform-tools
+ENV PATH=${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools
 
 # ===== YAML AND JSON TOOLS =====
 
