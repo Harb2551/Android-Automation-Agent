@@ -55,15 +55,27 @@ authenticate_gmsaas() {
         exit 1
     fi
     
+    # Configure Android SDK path for gmsaas (use container's Android SDK path)
+    local android_sdk_path="${ANDROID_HOME:-/opt/android-sdk}"
+    log_info "Configuring Android SDK path: $android_sdk_path"
+    if ! gmsaas config set android-sdk-path "$android_sdk_path" >/dev/null 2>&1; then
+        log_error "Failed to configure Android SDK path for gmsaas"
+        exit 1
+    fi
+    
     # Authenticate using gmsaas auth token command
+    log_info "Authenticating with API token..."
     if ! gmsaas auth token "$GENYMOTION_API_TOKEN" >/dev/null 2>&1; then
         log_error "gmsaas authentication failed. Check your API token."
         exit 1
     fi
     
     # Test authentication by listing instances
+    log_info "Testing authentication..."
     if ! gmsaas instances list >/dev/null 2>&1; then
         log_error "gmsaas authentication test failed."
+        log_error "Running gmsaas doctor for diagnostics..."
+        gmsaas doctor || true
         exit 1
     fi
     
