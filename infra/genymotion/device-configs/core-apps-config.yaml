@@ -1,0 +1,45 @@
+# Android World Core Apps Configuration
+# Minimal setup for basic android_world functionality
+
+device:
+  name: "AndroidWorld_CoreApps"
+  recipe: "Samsung Galaxy S23"
+  android_version: "14.0"   # Android 14 API 34
+  ram: 2048                 # 2GB RAM - minimal
+  disk: 32                  # 32GB storage
+  region: "us-east-1"
+
+settings:
+  developer_options: true
+  usb_debugging: true
+  animations_disabled: true
+  screen_timeout: unlimited
+  install_unknown_apps: true
+
+# Core apps only - most commonly used in android_world
+apps:
+  - simple-sms-messenger
+  - contacts
+  - simple-calendar-pro
+  - markor
+  - camera
+  - settings
+
+permissions:
+  sms:
+    - android.permission.SEND_SMS
+    - android.permission.READ_SMS
+  contacts:
+    - android.permission.READ_CONTACTS
+    - android.permission.WRITE_CONTACTS
+  camera:
+    - android.permission.CAMERA
+  storage:
+    - android.permission.READ_EXTERNAL_STORAGE
+    - android.permission.WRITE_EXTERNAL_STORAGE
+
+android_world:
+  task_families:
+    - android
+  max_steps_per_task: 10
+  parallel_instances: 1

@@ -1,0 +1,117 @@
+# Android World Full Test Suite Configuration
+# Based on analysis of all android_world task evaluations
+
+device:
+  name: "AndroidWorld_FullSuite"
+  recipe: "google_pixel_7"  # Genymotion Cloud device template
+  android_version: "13.0"   # Android API 33
+  ram: 4096                 # 4GB RAM
+  disk: 64                  # 64GB storage
+  region: "us-east-1"       # AWS region for Genymotion Cloud
+
+# System settings optimized for android_world testing
+settings:
+  developer_options: true
+  usb_debugging: true
+  stay_awake: true
+  animations_disabled: true
+  screen_timeout: unlimited
+  screen_lock: disabled
+  install_unknown_apps: true
+  location_services: true
+  auto_rotate: disabled
+  orientation: portrait
+
+# All apps required by android_world test suites
+# Based on app_names analysis from task evaluations
+apps:
+  # Core communication apps
+  - simple-sms-messenger      # SMS tasks
+  - contacts                  # Contact management tasks
+  - dialer                   # Phone tasks (currently disabled)
+  
+  # Productivity apps
+  - simple-calendar-pro      # Calendar tasks
+  - markor                   # Note-taking tasks
+  - clipper                  # Clipboard tasks
+  
+  # Media apps
+  - camera                   # Camera tasks
+  - audio-recorder           # Audio recording tasks
+  - simple-gallery-pro       # Gallery tasks
+  - retro-music             # Music tasks
+  - vlc                     # VLC media player tasks
+  
+  # Creative apps
+  - simple-draw-pro         # Drawing tasks
+  
+  # Utility apps
+  - files                   # File management tasks
+  - chrome                  # Browser tasks
+  - clock                   # Clock/timer tasks
+  - settings               # System settings tasks
+  
+  # Navigation apps
+  - osmand                 # Map/navigation tasks
+  
+  # Custom android_world apps (need APKs)
+  - recipe-app             # Recipe management tasks
+  - expense-app            # Expense tracking tasks
+  - miniwob-app           # Web-based interaction tasks
+  
+  # Information retrieval apps
+  - tasks                  # Task management
+  - open-tracks-sports-tracker  # Sports activity tracking
+  - joplin                 # Advanced note-taking
+
+# Permissions that need to be granted automatically
+permissions:
+  sms:
+    - android.permission.SEND_SMS
+    - android.permission.READ_SMS
+    - android.permission.RECEIVE_SMS
+  
+  contacts:
+    - android.permission.READ_CONTACTS
+    - android.permission.WRITE_CONTACTS
+    
+  phone:
+    - android.permission.CALL_PHONE
+    - android.permission.READ_PHONE_STATE
+    
+  camera:
+    - android.permission.CAMERA
+    - android.permission.RECORD_AUDIO
+    
+  storage:
+    - android.permission.READ_EXTERNAL_STORAGE
+    - android.permission.WRITE_EXTERNAL_STORAGE
+    - android.permission.MANAGE_EXTERNAL_STORAGE
+    
+  location:
+    - android.permission.ACCESS_FINE_LOCATION
+    - android.permission.ACCESS_COARSE_LOCATION
+    
+  other:
+    - android.permission.INTERNET
+    - android.permission.ACCESS_NETWORK_STATE
+    - android.permission.WAKE_LOCK
+    - android.permission.SYSTEM_ALERT_WINDOW
+
+# Android World test configuration
+android_world:
+  task_families:
+    - android        # Core Android tasks
+    - miniwob       # Web interaction tasks
+    - information_retrieval  # Information retrieval tasks
+  
+  max_steps_per_task: 10
+  parallel_instances: 1
+  timeout_seconds: 300
+
+# Performance optimizations for testing
+performance:
+  disable_animations: true
+  disable_background_apps: true
+  optimize_memory: true
+  fast_boot: true

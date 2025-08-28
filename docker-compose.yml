@@ -1,0 +1,114 @@
+# Android World Docker Compose Configuration
+# Orchestrates the complete android_world testing environment
+
+version: '3.8'
+
+services:
+  android_world:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: android-world-test:latest
+    container_name: android_world_runner
+    
+    # Environment variables
+    environment:
+      # Genymotion Cloud API configuration
+      GENYMOTION_API_KEY: ${GENYMOTION_API_KEY}
+      
+      # Device and app configuration
+      CONFIG_FILE: ${CONFIG_FILE:-infra/genymotion/device-configs/core-apps-config.yaml}
+      APP_MAPPING_FILE: ${APP_MAPPING_FILE:-infra/apps/app-mapping.yaml}
+      
+      # ADB configuration
+      ADB_DEVICE: ${ADB_DEVICE:-}
+      ADB_SERVER_SOCKET: tcp:5037
+      
+      # Android World test configuration
+      ANDROID_WORLD_AGENT: ${ANDROID_WORLD_AGENT:-m3a}
+      ANDROID_WORLD_TASK_FAMILY: ${ANDROID_WORLD_TASK_FAMILY:-android}
+      ANDROID_WORLD_MAX_STEPS: ${ANDROID_WORLD_MAX_STEPS:-10}
+      ANDROID_WORLD_OUTPUT_DIR: /app/results
+      
+      # Debug and logging
+      DEBUG_MODE: ${DEBUG_MODE:-true}
+      
+      # Python environment
+      PYTHONPATH: /app/android_world
+      ANDROID_WORLD_HOME: /app/android_world
+      
+    # Volume mounts
+    volumes:
+      # Results and logs persistence
+      - ./results:/app/results
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+      
+      # Configuration file access (optional override)
+      - ./infra:/app/infra:ro
+      
+      # APK cache for faster subsequent runs
+      - android_world_apks:/app/infra/apps/apks
+      
+      # Mount /tmp to persist Genymotion connection files across container restarts
+      - android_world_tmp:/tmp
+      
+    # Network configuration
+    network_mode: host  # Required for ADB connection to Genymotion Cloud
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "adb", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Default command
+    command: ["full"]
+
+  # Optional: File server for easy access to results
+  results_server:
+    image: nginx:alpine
+    container_name: android_world_results
+    ports:
+      - "8080:80"
+    volumes:
+      - ./results:/usr/share/nginx/html/results:ro
+      - ./logs:/usr/share/nginx/html/logs:ro
+    environment:
+      - NGINX_PORT=80
+    profiles:
+      - dev
+      - debug
+    
+  # Optional: ADB server for external connections
+  adb_server:
+    image: sorccu/adb:latest
+    container_name: android_world_adb
+    ports:
+      - "5037:5037"
+    command: adb -a -P 5037 server nodaemon
+    profiles:
+      - dev
+      - debug
+
+# Named volumes
+volumes:
+  android_world_apks:
+    driver: local
+  android_world_tmp:
+    driver: local

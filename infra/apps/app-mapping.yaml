@@ -1,0 +1,200 @@
+# Android World App Mapping Configuration
+# Maps app names to APK files and download sources
+
+# Core Android Apps (System/Pre-installed)
+apps:
+  # Communication Apps
+  simple-sms-messenger:
+    apk_file: "simple-sms-messenger.apk"
+    package_name: "com.simplemobiletools.smsmessenger"
+    download_url: "https://f-droid.org/repo/com.simplemobiletools.smsmessenger_76.apk"
+    source: "f-droid"
+    description: "Open source SMS messenger app"
+    
+  contacts:
+    apk_file: "simple-contacts-pro.apk"
+    package_name: "com.simplemobiletools.contacts.pro"
+    download_url: "https://f-droid.org/repo/com.simplemobiletools.contacts.pro_79.apk"
+    source: "f-droid"
+    description: "Simple contacts management app"
+    
+  dialer:
+    apk_file: "simple-dialer.apk"
+    package_name: "com.simplemobiletools.dialer"
+    download_url: "https://f-droid.org/repo/com.simplemobiletools.dialer_42.apk"
+    source: "f-droid"
+    description: "Simple phone dialer app"
+
+  # Productivity Apps
+  simple-calendar-pro:
+    apk_file: "simple-calendar-pro.apk"
+    package_name: "com.simplemobiletools.calendar.pro"
+    download_url: "https://f-droid.org/repo/com.simplemobiletools.calendar.pro_175.apk"
+    source: "f-droid"
+    description: "Calendar and event management"
+    
+  markor:
+    apk_file: "markor.apk"
+    package_name: "net.gsantner.markor"
+    download_url: "https://f-droid.org/repo/net.gsantner.markor_132.apk"
+    source: "f-droid"
+    description: "Text editor for markdown and todo files"
+    
+  clipper:
+    apk_file: "clipper.apk"
+    package_name: "org.projectmaxs.module.clipboard"
+    download_url: "https://f-droid.org/repo/org.projectmaxs.module.clipboard_6.apk"
+    source: "f-droid"
+    description: "Clipboard manager"
+
+  # Media Apps
+  camera:
+    apk_file: "simple-camera.apk"
+    package_name: "com.simplemobiletools.camera"
+    download_url: "https://f-droid.org/repo/com.simplemobiletools.camera_96.apk"
+    source: "f-droid"
+    description: "Simple camera app"
+    
+  audio-recorder:
+    apk_file: "audio-recorder.apk"
+    package_name: "com.github.axet.audiorecorder"
+    download_url: "https://f-droid.org/repo/com.github.axet.audiorecorder_329.apk"
+    source: "f-droid"
+    description: "Audio recording application"
+    
+  simple-gallery-pro:
+    apk_file: "simple-gallery-pro.apk"
+    package_name: "com.simplemobiletools.gallery.pro"
+    download_url: "https://f-droid.org/repo/com.simplemobiletools.gallery.pro_451.apk"
+    source: "f-droid"
+    description: "Photo and video gallery"
+    
+  retro-music:
+    apk_file: "retro-music.apk"
+    package_name: "code.name.monkey.retromusic"
+    download_url: "https://f-droid.org/repo/code.name.monkey.retromusic_465.apk"
+    source: "f-droid"
+    description: "Material Design music player"
+    
+  vlc:
+    apk_file: "vlc.apk"
+    package_name: "org.videolan.vlc"
+    download_url: "https://f-droid.org/repo/org.videolan.vlc_13040308.apk"
+    source: "f-droid"
+    description: "VLC media player"
+
+  # Creative Apps
+  simple-draw-pro:
+    apk_file: "simple-draw-pro.apk"
+    package_name: "com.simplemobiletools.draw.pro"
+    download_url: "https://f-droid.org/repo/com.simplemobiletools.draw.pro_75.apk"
+    source: "f-droid"
+    description: "Simple drawing application"
+
+  # Utility Apps
+  files:
+    apk_file: "simple-file-manager-pro.apk"
+    package_name: "com.simplemobiletools.filemanager.pro"
+    download_url: "https://f-droid.org/repo/com.simplemobiletools.filemanager.pro_109.apk"
+    source: "f-droid"
+    description: "File manager application"
+    
+  chrome:
+    apk_file: "browser.apk"
+    package_name: "org.mozilla.firefox"
+    download_url: "https://f-droid.org/repo/org.mozilla.firefox_2015835985.apk"
+    source: "f-droid"
+    description: "Firefox browser (Chrome alternative)"
+    
+  clock:
+    apk_file: "simple-clock.apk"
+    package_name: "com.simplemobiletools.clock"
+    download_url: "https://f-droid.org/repo/com.simplemobiletools.clock_42.apk"
+    source: "f-droid"
+    description: "Clock and timer app"
+    
+  settings:
+    apk_file: "system-settings.apk"
+    package_name: "com.android.settings"
+    download_url: ""
+    source: "system"
+    description: "System settings (pre-installed)"
+
+  # Navigation Apps
+  osmand:
+    apk_file: "osmand.apk"
+    package_name: "net.osmand"
+    download_url: "https://f-droid.org/repo/net.osmand_440.apk"
+    source: "f-droid"
+    description: "Offline maps and navigation"
+
+  # Android World Custom Apps (need to be built/provided)
+  recipe-app:
+    apk_file: "recipe-app.apk"
+    package_name: "com.androidworld.recipeapp"
+    download_url: ""
+    source: "android_world"
+    description: "Custom recipe management app for android_world"
+    
+  expense-app:
+    apk_file: "expense-app.apk"
+    package_name: "com.androidworld.expenseapp"
+    download_url: ""
+    source: "android_world"
+    description: "Custom expense tracking app for android_world"
+    
+  miniwob-app:
+    apk_file: "miniwob-app.apk"
+    package_name: "com.google.androidenv.miniwob"
+    download_url: ""
+    source: "android_world"
+    description: "MiniWoB web interaction tasks app"
+
+  # Information Retrieval Apps
+  tasks:
+    apk_file: "tasks.apk"
+    package_name: "org.tasks"
+    download_url: "https://f-droid.org/repo/org.tasks_130801.apk"
+    source: "f-droid"
+    description: "Task management application"
+    
+  open-tracks-sports-tracker:
+    apk_file: "open-tracks.apk"
+    package_name: "de.dennisguse.opentracks"
+    download_url: "https://f-droid.org/repo/de.dennisguse.opentracks_472.apk"
+    source: "f-droid"
+    description: "Sports activity tracking"
+    
+  joplin:
+    apk_file: "joplin.apk"
+    package_name: "net.cozic.joplin"
+    download_url: "https://github.com/laurent22/joplin/releases/download/android-v2.14.20/joplin-v2.14.20.apk"
+    source: "github"
+    description: "Advanced note-taking and synchronization"
+
+# Download sources configuration
+sources:
+  f-droid:
+    base_url: "https://f-droid.org/repo/"
+    mirror_urls:
+      - "https://mirror.f-droid.org/fdroid/repo/"
+      - "https://f-droid.org/archive/"
+    
+  github:
+    base_url: "https://github.com/"
+    rate_limit: 60  # requests per hour
+    
+  android_world:
+    base_url: ""
+    note: "Custom apps need to be built from android_world source"
+    
+  system:
+    note: "Pre-installed system apps"
+
+# Installation notes
+installation_notes:
+  - "F-Droid apps are open source and safe to install"
+  - "Android World custom apps need to be built from source"
+  - "System apps like 'settings' are already installed"
+  - "Some apps may require specific Android API levels"
+  - "APK version numbers in URLs may need updating"

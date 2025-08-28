@@ -1,0 +1,190 @@
+# ===== SENSITIVE FILES =====
+# Never commit API keys or credentials
+.env
+.env.*
+**/genymotion_connection.env
+**/connection.env
+
+# API keys and secrets
+api_key.txt
+credentials.json
+secrets/
+
+# ===== LOGS AND TEMPORARY FILES =====
+logs/
+*.log
+/tmp/
+temp/
+cache/
+
+# Android World output and results
+results/
+output/
+android_world_output/
+/app/results/
+/app/logs/
+/app/cache/
+
+# ===== DOCKER AND CONTAINERIZATION =====
+# Docker volumes and data
+docker-compose.override.yml
+.dockerignore
+
+# Container logs
+docker-logs/
+
+# ===== PYTHON =====
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+android_world_venv/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===== ANDROID DEVELOPMENT =====
+# Android SDK (large files - should be downloaded by setup)
+android-sdk/
+platform-tools/
+build-tools/
+
+# APK files (can be large)
+*.apk
+*.aab
+infra/apps/apks/
+apks/
+
+# Android build artifacts
+.gradle/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# ===== IDE AND EDITOR FILES =====
+# VSCode
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+!.vscode/tasks.json
+
+# JetBrains IDEs
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# ===== OPERATING SYSTEM FILES =====
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ===== NODE.JS (if any frontend components) =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===== GENYMOTION SPECIFIC =====
+# Instance data and connection files
+instance_*.json
+genymotion_*.json
+
+# ===== TESTING AND DEBUG =====
+# Test artifacts
+test-results/
+test_output/
+screenshots/
+debug_*.log
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# ===== EXTERNAL DEPENDENCIES =====
+# External repositories (should be git submodules or downloaded)
+external/android_world/
+external/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# ===== PROJECT SPECIFIC =====
+# Configuration overrides (keep templates, ignore actual configs with real data)
+*config.local.*
+*-local.yaml
+*-local.json
+
+# Private notes and documentation
+NOTES.md
+TODO.private.md
