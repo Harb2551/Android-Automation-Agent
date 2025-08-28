@@ -116,13 +116,31 @@ check_existing_instance() {
         local device_serial
         device_serial=$(echo "$existing_devices" | awk '{print $1}')
         log_info "Found existing ADB device: $device_serial"
-        log_info "Skipping instance provisioning - using existing connection"
         
-        # Create mock connection info for existing device
+        # Try to match this ADB device with a gmsaas instance
+        local instances_output
+        instances_output=$(gmsaas instances list 2>/dev/null | tail -n +2)  # Skip header line
+        
+        # Look for ONLINE instances and try to match ADB serial
+        local matching_instance
+        matching_instance=$(echo "$instances_output" | grep "ONLINE" | head -1 | awk '{print $1}')
+        
+        if [ -n "$matching_instance" ]; then
+            log_info "Found matching ONLINE instance: $matching_instance"
+            INSTANCE_ID="$matching_instance"
+        else
+            log_info "No matching gmsaas instance found, using host-managed"
+            INSTANCE_ID="host-managed"
+        fi
+        
+        # Set global ADB_DEVICE variable
+        ADB_DEVICE="$device_serial"
+        
+        # Create connection info for existing device
         cat > /tmp/genymotion_connection.env << EOF
-GENYMOTION_INSTANCE_ID="host-managed"
+GENYMOTION_INSTANCE_ID="$INSTANCE_ID"
 GENYMOTION_ADB_DEVICE="$device_serial"
-GENYMOTION_CONNECTION_TYPE="gmsaas"
+GENYMOTION_CONNECTION_TYPE="existing"
 EOF
         return 0
     fi
@@ -216,74 +234,29 @@ wait_for_online() {
 
 # Connect ADB using gmsaas
 connect_adb() {
-    log_info "Starting ADB tunnel service..."
-    
-    # First start the ADB service (like we did manually)
-    local adb_start_output
-    adb_start_output=$(gmsaas adb start 2>&1)
-    local adb_start_exit_code=$?
-    
-    log_info "gmsaas adb start exit code: $adb_start_exit_code"
-    log_info "gmsaas adb start output: $adb_start_output"
-    
-    sleep 2
-    
-    log_info "Connecting ADB to instance $INSTANCE_ID with retry logic..."
-    
-    # Retry ADB connection multiple times as it may take time to be ready
-    local max_adb_attempts=5
-    local adb_attempt=1
-    local adb_endpoint
-    local adb_connect_exit_code
-    
-    while [ $adb_attempt -le $max_adb_attempts ]; do
-        log_info "ADB connection attempt $adb_attempt/$max_adb_attempts..."
+    # Check if we already have ADB_DEVICE from existing connection
+    if [ -n "$ADB_DEVICE" ]; then
+        log_info "Using existing ADB connection: $ADB_DEVICE"
+        log_info "Verifying existing connection..."
         
-        # Aggressive cleanup of ADB processes
-        adb kill-server > /dev/null 2>&1 || true
-        adb start-server > /dev/null 2>&1 || true
-        
-        set +e
-        adb_endpoint=$(gmsaas instances adbconnect "$INSTANCE_ID" 2>&1)
-        adb_connect_exit_code=$?
-        set -e
-        
-        log_info "gmsaas instances adbconnect exit code: $adb_connect_exit_code"
-        log_info "ADB connection output: '$adb_endpoint'"
-        
-        if [ $adb_connect_exit_code -eq 0 ]; then
-            log_info "✓ ADB connection successful on attempt $adb_attempt"
-            break
-        else
-            log_warn "ADB connection attempt $adb_attempt failed"
-            log_warn "Exit code: $adb_connect_exit_code"
-            log_warn "Output: '$adb_endpoint'"
+        # Test the existing connection
+        if adb -s "$ADB_DEVICE" shell echo "test" >/dev/null 2>&1; then
+            log_info "✓ Existing ADB connection is working"
             
-            if [ $adb_attempt -eq $max_adb_attempts ]; then
-                log_error "All ADB connection attempts failed"
-                log_error "Final command: gmsaas instances adbconnect $INSTANCE_ID"
-                log_error "Final exit code: $adb_connect_exit_code"
-                log_error "Final output: '$adb_endpoint'"
-                
-                # Final diagnostics
-                log_error "Running final diagnostics..."
-                gmsaas doctor || true
-                gmsaas instances list || true
-                exit 1
-            else
-                log_info "Waiting 15 seconds before retry..."
-                sleep 15
-                ((adb_attempt++))
-            fi
+            # Save connection info for other scripts
+            cat > /tmp/genymotion_connection.env << EOF
+GENYMOTION_INSTANCE_ID="$INSTANCE_ID"
+GENYMOTION_ADB_DEVICE="$ADB_DEVICE"
+GENYMOTION_CONNECTION_TYPE="existing"
+EOF
+            return 0
+        else
+            log_warn "Existing ADB connection test failed, will check all devices..."
         fi
-    done
+    fi
     
-    log_info "ADB tunnel created successfully: $adb_endpoint"
-    
-    # Verify ADB connection
-    log_info "Waiting for ADB connection to stabilize..."
-    sleep 5
-    
+    # Check all available ADB devices
+    log_info "Checking all available ADB devices..."
     local devices
     devices=$(adb devices 2>&1)
     local adb_devices_exit_code=$?
@@ -292,28 +265,38 @@ connect_adb() {
     log_info "ADB devices output:"
     echo "$devices"
     
-    # Extract device from adb devices output
+    # Extract any working device from adb devices output
     local device_line
-    device_line=$(echo "$devices" | grep "device$" | head -1)
+    device_line=$(echo "$devices" | grep -E "device$|emulator$" | head -1)
     
     if [ -n "$device_line" ]; then
         ADB_DEVICE=$(echo "$device_line" | awk '{print $1}')
-        log_info "✓ ADB device ready: $ADB_DEVICE"
+        log_info "✓ Found working ADB device: $ADB_DEVICE"
         
-        # Save connection info for other scripts
-        cat > /tmp/genymotion_connection.env << EOF
+        # Test this device
+        if adb -s "$ADB_DEVICE" shell echo "connectivity test" >/dev/null 2>&1; then
+            log_info "✓ ADB device connectivity confirmed"
+            
+            # Save connection info for other scripts
+            cat > /tmp/genymotion_connection.env << EOF
 GENYMOTION_INSTANCE_ID="$INSTANCE_ID"
 GENYMOTION_ADB_DEVICE="$ADB_DEVICE"
-GENYMOTION_CONNECTION_TYPE="gmsaas"
+GENYMOTION_CONNECTION_TYPE="host-managed"
 EOF
-        
-        return 0
-    else
-        log_error "ADB connection failed - no devices found"
-        log_error "Full adb devices output: $devices"
-        log_error "Expected device line with 'device$' not found"
-        exit 1
+            return 0
+        else
+            log_warn "Device $ADB_DEVICE found but not responding to commands"
+        fi
     fi
+    
+    log_error "No working ADB devices found"
+    log_error "Please establish gmsaas connection on host first:"
+    log_error "  1. gmsaas auth token <your_token>"
+    log_error "  2. gmsaas instances start <recipe_uuid> <name>"
+    log_error "  3. gmsaas adb start"
+    log_error "  4. gmsaas instances adbconnect <instance_id>"
+    log_error "  5. Then run this container"
+    exit 1
 }
 
 # Test device connectivity
