@@ -21,6 +21,7 @@ services:
       # ADB configuration
       ADB_DEVICE: ${ADB_DEVICE:-}
       ADB_SERVER_SOCKET: tcp:5037
+      ADB_HOST_PORT: ${ADB_HOST_PORT}
       
       # Android World test configuration
       ANDROID_WORLD_AGENT: ${ANDROID_WORLD_AGENT:-m3a}

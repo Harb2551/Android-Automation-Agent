@@ -108,44 +108,10 @@ authenticate_gmsaas() {
 check_existing_instance() {
     log_info "Checking for existing instances..."
     
-    # First check if ADB devices are already available (from host)
-    local existing_devices
-    existing_devices=$(adb devices 2>/dev/null | grep -E "device$|emulator$" | head -1)
+    # Skip ADB device check in container - will be handled in connect_adb()
+    log_info "Skipping ADB device check - will be handled in connect_adb()"
     
-    if [ -n "$existing_devices" ]; then
-        local device_serial
-        device_serial=$(echo "$existing_devices" | awk '{print $1}')
-        log_info "Found existing ADB device: $device_serial"
-        
-        # Try to match this ADB device with a gmsaas instance
-        local instances_output
-        instances_output=$(gmsaas instances list 2>/dev/null | tail -n +2)  # Skip header line
-        
-        # Look for ONLINE instances and try to match ADB serial
-        local matching_instance
-        matching_instance=$(echo "$instances_output" | grep "ONLINE" | head -1 | awk '{print $1}')
-        
-        if [ -n "$matching_instance" ]; then
-            log_info "Found matching ONLINE instance: $matching_instance"
-            INSTANCE_ID="$matching_instance"
-        else
-            log_info "No matching gmsaas instance found, using host-managed"
-            INSTANCE_ID="host-managed"
-        fi
-        
-        # Set global ADB_DEVICE variable
-        ADB_DEVICE="$device_serial"
-        
-        # Create connection info for existing device
-        cat > /tmp/genymotion_connection.env << EOF
-GENYMOTION_INSTANCE_ID="$INSTANCE_ID"
-GENYMOTION_ADB_DEVICE="$device_serial"
-GENYMOTION_CONNECTION_TYPE="existing"
-EOF
-        return 0
-    fi
-    
-    # Check gmsaas instances if no ADB devices found
+    # Check gmsaas instances
     local instances_output
     instances_output=$(gmsaas instances list 2>/dev/null | tail -n +2)  # Skip header line
     
@@ -256,18 +222,28 @@ EOF
     fi
     
     # Container-specific ADB setup for macOS host (Docker Desktop)
-    log_info "Setting up container ADB connection for macOS host..."
+    # Following official Genymotion approach for containers
+    log_info "Setting up container ADB connection to host gmsaas tunnel..."
     
-    # Kill container's ADB server to connect to host's ADB server
+    # Check for ADB_HOST_PORT environment variable
+    if [ -z "$ADB_HOST_PORT" ]; then
+        log_error "ADB_HOST_PORT environment variable not set"
+        log_error "Please set it when running the container:"
+        log_error "  docker-compose run -e ADB_HOST_PORT=60561 android-world"
+        log_error "Or add it to docker-compose.yml environment section"
+        exit 1
+    fi
+    
+    # Kill container's ADB server to avoid conflicts
     log_info "Killing container's ADB server..."
     adb kill-server >/dev/null 2>&1 || true
     
-    # Set environment to connect to host ADB server
-    export ANDROID_ADB_SERVER_ADDRESS="host.docker.internal"
-    log_info "Set ANDROID_ADB_SERVER_ADDRESS=host.docker.internal"
+    # Connect to the specific port provided
+    log_info "Connecting to host gmsaas tunnel at host.docker.internal:$ADB_HOST_PORT"
+    adb connect "host.docker.internal:$ADB_HOST_PORT"
     
-    # Check for devices on host ADB server
-    log_info "Checking for devices on host ADB server..."
+    # Check for devices after connection
+    log_info "Checking for ADB devices..."
     local devices
     devices=$(adb devices 2>&1)
     local adb_devices_exit_code=$?
