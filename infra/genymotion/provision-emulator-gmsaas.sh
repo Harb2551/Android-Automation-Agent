@@ -3,7 +3,7 @@
 # Genymotion Cloud Android Emulator Provisioning Script (gmsaas CLI)
 # Simple workflow using gmsaas CLI commands
 
-set -e  # Exit on any error
+set -e  # Exit on any error (will be disabled temporarily for debugging)
 
 # ===== CONFIGURATION =====
 DEVICE_NAME="AndroidWorld-Test"
@@ -228,6 +228,9 @@ connect_adb() {
     
     log_info "Connecting ADB to instance $INSTANCE_ID..."
     
+    # Temporarily disable exit on error to capture full debug info
+    set +e
+    
     # Use gmsaas instances adbconnect to connect to specific instance
     local adb_endpoint
     local adb_connect_exit_code
@@ -235,14 +238,23 @@ connect_adb() {
     adb_endpoint=$(gmsaas instances adbconnect "$INSTANCE_ID" 2>&1)
     adb_connect_exit_code=$?
     
+    # Re-enable exit on error
+    set -e
+    
     log_info "gmsaas instances adbconnect exit code: $adb_connect_exit_code"
-    log_info "ADB connection output: $adb_endpoint"
+    log_info "ADB connection output: '$adb_endpoint'"
     
     if [ $adb_connect_exit_code -ne 0 ]; then
         log_error "gmsaas instances adbconnect failed"
         log_error "Command: gmsaas instances adbconnect $INSTANCE_ID"
         log_error "Exit code: $adb_connect_exit_code"
-        log_error "Output: $adb_endpoint"
+        log_error "Full output: '$adb_endpoint'"
+        
+        # Try to get more diagnostic info
+        log_error "Running gmsaas doctor for diagnostics..."
+        gmsaas doctor || true
+        log_error "Checking instance status..."
+        gmsaas instances list || true
         exit 1
     fi
     
