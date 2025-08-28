@@ -192,10 +192,61 @@ find_recipe_id() {
     echo "$recipe_id"
 }
 
+# Check for existing instances with the same name
+check_existing_instances() {
+    log_info "Checking for existing instances with name: $DEVICE_NAME"
+    
+    local instances_response
+    instances_response=$(curl -s --insecure -H "x-api-token: $GENYMOTION_API_KEY" \
+        "$GENYMOTION_API_ENDPOINT/v1/instances/")
+    
+    log_debug "Instances API response: $instances_response"
+    
+    # Look for running instances with matching name
+    local existing_instance
+    existing_instance=$(echo "$instances_response" | jq -r --arg name "$DEVICE_NAME" \
+        '.results[]? | select(.name == $name and (.state == "ONLINE" or .state == "BOOTING" or .state == "STARTING")) | .uuid' | head -1)
+    
+    if [ -n "$existing_instance" ] && [ "$existing_instance" != "null" ]; then
+        log_info "Found existing instance: $existing_instance"
+        
+        # Get instance details
+        local instance_details
+        instance_details=$(curl -s --insecure -H "x-api-token: $GENYMOTION_API_KEY" \
+            "$GENYMOTION_API_ENDPOINT/v1/instances/$existing_instance")
+        
+        local state
+        state=$(echo "$instance_details" | jq -r '.state')
+        
+        log_info "Existing instance state: $state"
+        
+        if [ "$state" = "ONLINE" ]; then
+            log_info "Reusing existing ONLINE instance: $existing_instance"
+            INSTANCE_ID="$existing_instance"
+            return 0
+        elif [ "$state" = "BOOTING" ] || [ "$state" = "STARTING" ]; then
+            log_info "Found existing instance still starting: $existing_instance"
+            log_info "Waiting for existing instance to come online..."
+            INSTANCE_ID="$existing_instance"
+            return 0
+        fi
+    fi
+    
+    log_info "No existing running instance found - will create new one"
+    return 1
+}
+
 # Create and start Genymotion Cloud instance
 create_instance() {
     local recipe_id="$1"
-    log_info "Creating and starting Genymotion Cloud instance..."
+    
+    # First check if we already have a running instance
+    if check_existing_instances; then
+        log_info "Using existing instance: $INSTANCE_ID"
+        return 0
+    fi
+    
+    log_info "Creating and starting new Genymotion Cloud instance..."
     log_info "Making API call to Genymotion Cloud (this may take 30-60 seconds)..."
     
     local create_payload
@@ -459,7 +510,35 @@ connect_adb() {
         
         # Update connection type to websocket as fallback
         if [ -f "/tmp/genymotion_connection.env" ]; then
+            # Update connection type
             sed -i 's/GENYMOTION_CONNECTION_TYPE="tcp"/GENYMOTION_CONNECTION_TYPE="websocket"/' /tmp/genymotion_connection.env
+            
+            # Get current instance status to retrieve WebSocket URL
+            local current_status
+            current_status=$(curl -s --insecure -H "x-api-token: $GENYMOTION_API_KEY" \
+                "$GENYMOTION_API_ENDPOINT/v1/instances/$INSTANCE_ID")
+            
+            local websocket_adb_url
+            websocket_adb_url=$(echo "$current_status" | jq -r '.adb_url // .publicAdbUrl // empty')
+            
+            if [ -n "$websocket_adb_url" ] && [[ "$websocket_adb_url" =~ ^wss:// ]]; then
+                # Add or update WebSocket URL in environment file
+                if grep -q "GENYMOTION_WEBSOCKET_URL=" /tmp/genymotion_connection.env; then
+                    sed -i "s|GENYMOTION_WEBSOCKET_URL=.*|GENYMOTION_WEBSOCKET_URL=\"$websocket_adb_url\"|" /tmp/genymotion_connection.env
+                else
+                    echo "GENYMOTION_WEBSOCKET_URL=\"$websocket_adb_url\"" >> /tmp/genymotion_connection.env
+                fi
+                
+                # Also update ADB_URL to point to WebSocket
+                if grep -q "GENYMOTION_ADB_URL=" /tmp/genymotion_connection.env; then
+                    sed -i "s|GENYMOTION_ADB_URL=.*|GENYMOTION_ADB_URL=\"$websocket_adb_url\"|" /tmp/genymotion_connection.env
+                else
+                    echo "GENYMOTION_ADB_URL=\"$websocket_adb_url\"" >> /tmp/genymotion_connection.env
+                fi
+                
+                log_info "Updated WebSocket ADB URL: $websocket_adb_url"
+            fi
+            
             log_info "Updated connection type to websocket due to connectivity issues"
         fi
         return 0
@@ -491,7 +570,35 @@ connect_adb() {
             
             # Update connection type to websocket
             if [ -f "/tmp/genymotion_connection.env" ]; then
+                # Update connection type
                 sed -i 's/GENYMOTION_CONNECTION_TYPE="tcp"/GENYMOTION_CONNECTION_TYPE="websocket"/' /tmp/genymotion_connection.env
+                
+                # Get current instance status to retrieve WebSocket URL
+                local current_status
+                current_status=$(curl -s --insecure -H "x-api-token: $GENYMOTION_API_KEY" \
+                    "$GENYMOTION_API_ENDPOINT/v1/instances/$INSTANCE_ID")
+                
+                local websocket_adb_url
+                websocket_adb_url=$(echo "$current_status" | jq -r '.adb_url // .publicAdbUrl // empty')
+                
+                if [ -n "$websocket_adb_url" ] && [[ "$websocket_adb_url" =~ ^wss:// ]]; then
+                    # Add or update WebSocket URL in environment file
+                    if grep -q "GENYMOTION_WEBSOCKET_URL=" /tmp/genymotion_connection.env; then
+                        sed -i "s|GENYMOTION_WEBSOCKET_URL=.*|GENYMOTION_WEBSOCKET_URL=\"$websocket_adb_url\"|" /tmp/genymotion_connection.env
+                    else
+                        echo "GENYMOTION_WEBSOCKET_URL=\"$websocket_adb_url\"" >> /tmp/genymotion_connection.env
+                    fi
+                    
+                    # Also update ADB_URL to point to WebSocket
+                    if grep -q "GENYMOTION_ADB_URL=" /tmp/genymotion_connection.env; then
+                        sed -i "s|GENYMOTION_ADB_URL=.*|GENYMOTION_ADB_URL=\"$websocket_adb_url\"|" /tmp/genymotion_connection.env
+                    else
+                        echo "GENYMOTION_ADB_URL=\"$websocket_adb_url\"" >> /tmp/genymotion_connection.env
+                    fi
+                    
+                    log_info "Updated WebSocket ADB URL: $websocket_adb_url"
+                fi
+                
                 log_info "Updated connection type to websocket"
             fi
             return 0

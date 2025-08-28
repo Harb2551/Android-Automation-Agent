@@ -112,7 +112,7 @@ initialize_environment() {
     log_info "Initializing Android World environment..."
     
     # Create necessary directories
-    mkdir -p "$(dirname "$LOG_FILE")" "$ANDROID_WORLD_OUTPUT_DIR" /app/cache
+    mkdir -p "$(dirname "$LOG_FILE")" "$ANDROID_WORLD_OUTPUT_DIR" /app/cache ./logs
     
     # Initialize log file
     echo "=== Android World Run Log $(date) ===" > "$LOG_FILE"
@@ -155,6 +155,125 @@ provision_device() {
     else
         log_error "Device provisioning failed"
         exit 1
+    fi
+}
+
+# Start WebSocket ADB bridge if needed
+start_websocket_bridge() {
+    # Check for Genymotion connection details
+    if [ ! -f "/tmp/genymotion_connection.env" ]; then
+        log_debug "No Genymotion connection file found"
+        return 0
+    fi
+    
+    # Source the connection environment
+    source /tmp/genymotion_connection.env
+    
+    # Check connection type
+    local connection_type="${GENYMOTION_CONNECTION_TYPE:-tcp}"
+    log_info "Detected connection type: $connection_type"
+    
+    if [ "$connection_type" = "tcp" ]; then
+        log_info "TCP ADB connection - no bridge needed"
+        ADB_DEVICE="$GENYMOTION_HOST:$GENYMOTION_TCP_PORT"
+        return 0
+    elif [ "$connection_type" = "websocket" ]; then
+        log_info "WebSocket ADB detected - starting bridge for ADB compatibility"
+        
+        # Check if bridge is already running
+        if [ -f "/tmp/websocket_bridge.pid" ]; then
+            local existing_pid
+            existing_pid=$(cat /tmp/websocket_bridge.pid)
+            if kill -0 "$existing_pid" 2>/dev/null; then
+                log_info "WebSocket bridge already running (PID: $existing_pid)"
+                ADB_DEVICE="localhost:5555"
+                return 0
+            fi
+        fi
+        
+        # Verify WebSocket URL is available
+        local websocket_url="${GENYMOTION_WEBSOCKET_URL:-}"
+        
+        # If not set, try to get from ADB_URL but ensure it's WebSocket format
+        if [ -z "$websocket_url" ] || [ "$websocket_url" = "null" ]; then
+            if [[ "${GENYMOTION_ADB_URL:-}" =~ ^wss:// ]]; then
+                websocket_url="$GENYMOTION_ADB_URL"
+            else
+                log_error "No WebSocket ADB URL found in connection environment"
+                log_error "Available URLs: GENYMOTION_ADB_URL=${GENYMOTION_ADB_URL:-none}, GENYMOTION_WEBSOCKET_URL=${GENYMOTION_WEBSOCKET_URL:-none}"
+                return 1
+            fi
+        fi
+        
+        # Validate WebSocket URL format
+        if [[ ! "$websocket_url" =~ ^wss:// ]]; then
+            log_error "Invalid WebSocket URL format: $websocket_url"
+            log_error "Expected WebSocket URL starting with wss://"
+            return 1
+        fi
+        
+        log_info "Starting WebSocket-to-TCP ADB bridge..."
+        log_info "Bridge: $websocket_url -> localhost:5555"
+        
+        # Kill any existing ADB connections and bridges
+        adb kill-server 2>/dev/null || true
+        pkill -f "websocket-adb-bridge" 2>/dev/null || true
+        sleep 2
+        
+        # Set environment for bridge
+        export GENYMOTION_WEBSOCKET_URL="$websocket_url"
+        
+        # Start bridge
+        python3 /app/infra/websocket-bridge/websocket-adb-bridge.py > /tmp/websocket_bridge.log 2>&1 &
+        local bridge_pid=$!
+        
+        # Check if process started successfully
+        sleep 1
+        if ! kill -0 "$bridge_pid" 2>/dev/null; then
+            log_error "Failed to start WebSocket bridge process"
+            cat /tmp/websocket_bridge.log 2>/dev/null || echo "No bridge log available"
+            return 1
+        fi
+        
+        echo "$bridge_pid" > /tmp/websocket_bridge.pid
+        log_info "Bridge started with PID: $bridge_pid"
+        
+        # Wait for bridge to initialize
+        log_info "Waiting for bridge to initialize..."
+        sleep 8
+        
+        # Restart ADB and test connection
+        adb start-server
+        
+        local max_attempts=10
+        local attempt=1
+        local bridge_ready=false
+        
+        while [ $attempt -le $max_attempts ]; do
+            log_info "Testing bridge (attempt $attempt/$max_attempts)..."
+            
+            if adb connect localhost:5555 2>&1 | grep -q "connected\|already connected"; then
+                log_info "✓ WebSocket ADB bridge ready!"
+                ADB_DEVICE="localhost:5555"
+                bridge_ready=true
+                break
+            fi
+            
+            if ! kill -0 "$bridge_pid" 2>/dev/null; then
+                log_error "Bridge process died"
+                cat /tmp/websocket_bridge.log 2>/dev/null || echo "No bridge log"
+                return 1
+            fi
+            
+            sleep 3
+            ((attempt++))
+        done
+        
+        if [ "$bridge_ready" != "true" ]; then
+            log_error "Bridge failed to initialize"
+            kill "$bridge_pid" 2>/dev/null || true
+            return 1
+        fi
     fi
 }
 
@@ -210,50 +329,18 @@ run_android_world_tests() {
     
     log_info "===== RUNNING ANDROID WORLD TESTS ====="
     
-    # Check for Genymotion connection details
-    if [ -f "/tmp/genymotion_connection.env" ]; then
-        log_info "Loading Genymotion connection details..."
-        
-        # Source the connection environment
-        source /tmp/genymotion_connection.env
-        
-        # Check connection type
-        local connection_type="${GENYMOTION_CONNECTION_TYPE:-tcp}"
-        log_info "Connection type: $connection_type"
-        
-        if [ "$connection_type" = "tcp" ]; then
-            log_info "TCP ADB connection detected - Perfect for android_world!"
-            log_info "Using TCP ADB: $GENYMOTION_HOST:$GENYMOTION_TCP_PORT"
-            
-            # Set ADB device to use TCP connection
-            ADB_DEVICE="$GENYMOTION_HOST:$GENYMOTION_TCP_PORT"
-            log_info "ADB device set to: $ADB_DEVICE"
-            
-            # Test TCP ADB connection
-            log_info "Testing TCP ADB connection..."
-            adb kill-server 2>/dev/null || true
-            adb start-server
-            
-            if adb connect "$ADB_DEVICE"; then
-                log_info "TCP ADB connection successful!"
-            else
-                log_warn "TCP ADB connection test failed, but continuing..."
-            fi
-            
-        elif [ "$connection_type" = "websocket" ]; then
-            log_warn "WebSocket ADB connection detected"
-            log_warn "WebSocket ADB has known compatibility issues with android_world"
-            log_warn "Consider using TCP ADB port if available"
-            log_info "WebSocket URL: $GENYMOTION_WEBSOCKET_URL"
-            
-            # For WebSocket connections, we'll still try to detect devices
-            # but warn about potential issues
-            log_info "Proceeding with WebSocket connection (may cause issues)"
-        fi
-    else
-        log_info "No Genymotion connection file found - using existing ADB devices"
-    fi
+    # Bridge should already be started by start_websocket_bridge()
+    log_info "Using ADB connection established by bridge setup"
     
+    # If ADB_DEVICE not set, try to detect from existing connections
+    if [ -z "$ADB_DEVICE" ]; then
+        log_info "ADB device not set, detecting from available connections..."
+        ADB_DEVICE=$(adb devices | grep -E "device$|emulator$" | head -1 | awk '{print $1}')
+        
+        if [ -n "$ADB_DEVICE" ]; then
+            log_info "Using detected ADB device: $ADB_DEVICE"
+        fi
+    fi
     # Change to android_world directory
     cd android_world
     
@@ -364,6 +451,17 @@ cleanup_resources() {
     
     log_info "===== CLEANING UP RESOURCES ====="
     
+    # Cleanup WebSocket ADB bridge if running
+    if [ -f "/tmp/websocket_bridge.pid" ]; then
+        local bridge_pid
+        bridge_pid=$(cat /tmp/websocket_bridge.pid)
+        if kill -0 "$bridge_pid" 2>/dev/null; then
+            log_info "Stopping WebSocket ADB bridge (PID: $bridge_pid)..."
+            kill "$bridge_pid" 2>/dev/null || true
+            rm -f /tmp/websocket_bridge.pid
+        fi
+    fi
+    
     # Get Genymotion instance ID from connection file if available
     local genymotion_instance_id=""
     if [ -f "/tmp/genymotion_connection.env" ]; then
@@ -451,6 +549,7 @@ main() {
     
     # Execute workflow steps
     provision_device
+    start_websocket_bridge  # Start bridge early for both apps and tests
     install_applications
     grant_permissions
     run_android_world_tests

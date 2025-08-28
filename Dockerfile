@@ -107,6 +107,8 @@ RUN pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted
     # HTTP and API clients
     requests \
     httpx \
+    # WebSocket support for ADB bridge
+    websockets \
     # Image processing
     pillow \
     opencv-python-headless \

@@ -115,16 +115,21 @@ detect_adb_device() {
         source /tmp/genymotion_connection.env
         
         if [[ "$GENYMOTION_ADB_URL" =~ wss:// ]]; then
-            log_warn "WebSocket ADB connection detected: $GENYMOTION_ADB_URL"
-            log_warn "WebSocket ADB is not supported by standard ADB commands"
-            log_warn "For WebSocket ADB connections, you need:"
-            log_warn "1. Use Genymotion's gmtool for device management"
-            log_warn "2. Use a WebSocket-to-TCP ADB bridge"
-            log_warn "3. Or connect via Genymotion Desktop application"
-            log_warn ""
-            log_warn "Skipping app installation due to WebSocket ADB limitation"
-            log_warn "This is expected behavior for Genymotion Cloud instances"
-            exit 0
+            log_info "WebSocket ADB connection detected: $GENYMOTION_ADB_URL"
+            log_info "Checking for WebSocket-to-TCP ADB bridge..."
+            
+            # Check if bridge is available (localhost:5555)
+            if adb devices | grep -q "localhost:5555"; then
+                log_info "✓ WebSocket ADB bridge found - using localhost:5555"
+                ADB_DEVICE="localhost:5555"
+                log_info "Using WebSocket bridge ADB device: $ADB_DEVICE"
+                return 0  # Return early - device is set, no need for auto-detection
+            else
+                log_warn "WebSocket-to-TCP bridge not found"
+                log_warn "WebSocket ADB requires bridge setup for app installation"
+                log_warn "Skipping app installation - bridge should be started first"
+                exit 0
+            fi
         fi
     fi
     
@@ -168,12 +173,52 @@ detect_adb_device() {
 validate_adb_connection() {
     log_info "Validating ADB connection to $ADB_DEVICE..."
     
-    # Test basic ADB command
-    if ! adb -s "$ADB_DEVICE" shell echo "test" > /dev/null 2>&1; then
-        log_error "Cannot communicate with ADB device: $ADB_DEVICE"
-        log_error "Please check device connection and authorization"
-        exit 1
+    # Show initial ADB status
+    log_info "Current ADB devices status:"
+    adb devices
+    
+    # For WebSocket bridge connections, wait for device to become ready
+    log_info "Waiting for device to become ready (may need authorization)..."
+    
+    # Use adb wait-for-device with timeout
+    if timeout 30 adb -s "$ADB_DEVICE" wait-for-device; then
+        log_info "✓ Device is now ready"
+    else
+        log_warn "Device didn't become ready within 30 seconds, trying anyway..."
     fi
+    
+    # Show updated ADB status
+    log_info "Updated ADB devices status:"
+    adb devices
+    
+    # Try basic communication with retries
+    local max_attempts=3
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        log_info "ADB validation attempt $attempt/$max_attempts..."
+        
+        # Test basic ADB command
+        if adb -s "$ADB_DEVICE" shell echo "test" > /dev/null 2>&1; then
+            log_info "✓ ADB communication successful"
+            break
+        else
+            log_warn "ADB communication failed (attempt $attempt)"
+            if [ $attempt -eq $max_attempts ]; then
+                log_error "Cannot communicate with ADB device: $ADB_DEVICE after $max_attempts attempts"
+                log_error "Final device status:"
+                adb devices
+                
+                # Try to get more detailed error info
+                log_error "Attempting direct shell connection for debugging:"
+                adb -s "$ADB_DEVICE" shell echo "debug test" || log_error "Direct shell failed"
+                
+                exit 1
+            fi
+            sleep 2
+            ((attempt++))
+        fi
+    done
     
     # Get device info
     local device_model
@@ -182,7 +227,7 @@ validate_adb_connection() {
     android_version=$(adb -s "$ADB_DEVICE" shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')
     
     log_info "Device: $device_model (Android $android_version)"
-    log_info "ADB connection validated"
+    log_info "ADB connection validated successfully"
 }
 
 # Read app list from configuration
