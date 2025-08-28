@@ -12,7 +12,7 @@ services:
     # Environment variables
     environment:
       # Genymotion Cloud API configuration
-      GENYMOTION_API_KEY: ${GENYMOTION_API_KEY}
+      GENYMOTION_API_TOKEN: ${GENYMOTION_API_TOKEN}
       
       # Device and app configuration
       CONFIG_FILE: ${CONFIG_FILE:-infra/genymotion/device-configs/core-apps-config.yaml}
