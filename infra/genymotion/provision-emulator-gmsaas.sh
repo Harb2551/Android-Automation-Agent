@@ -240,11 +240,11 @@ connect_adb() {
         # Temporarily disable exit on error to capture full debug info
         set +e
         
-        adb_endpoint=$(gmsaas instances adbconnect -v "$INSTANCE_ID" 2>&1)
+        adb_endpoint=$(gmsaas instances adbconnect "$INSTANCE_ID" 2>&1)
         adb_connect_exit_code=$?
         
         # Re-enable exit on error
-        set -e
+        # set -e
         
         log_info "gmsaas instances adbconnect exit code: $adb_connect_exit_code"
         log_info "ADB connection output: '$adb_endpoint'"
