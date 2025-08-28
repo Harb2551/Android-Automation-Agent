@@ -234,6 +234,10 @@ EOF
     log_info "Set ANDROID_ADB_SERVER_ADDRESS=host.docker.internal"
     log_info "Set ANDROID_ADB_SERVER_PORT=5037"
     
+    # Connect to the gmsaas tunnel on host
+    log_info "Connecting to host gmsaas tunnel at host.docker.internal:5555"
+    adb connect "host.docker.internal:5555"
+    
     # Check what devices the host ADB server has
     log_info "Checking devices from host ADB server..."
     local devices
