@@ -1,8 +1,6 @@
 # Android World Docker Compose Configuration
 # Orchestrates the complete android_world testing environment
 
-version: '3.8'
-
 services:
   android_world:
     build:
@@ -43,15 +41,6 @@ services:
       - ./results:/app/results
       - ./logs:/app/logs
       - ./cache:/app/cache
-      
-      # Configuration file access (optional override)
-      - ./infra:/app/infra:ro
-      
-      # APK cache for faster subsequent runs
-      - android_world_apks:/app/infra/apps/apks
-      
-      # Mount /tmp to persist Genymotion connection files across container restarts
-      - android_world_tmp:/tmp
       
     # Network configuration
     network_mode: host  # Required for ADB connection to Genymotion Cloud
@@ -105,10 +94,3 @@ services:
     profiles:
       - dev
       - debug
-
-# Named volumes
-volumes:
-  android_world_apks:
-    driver: local
-  android_world_tmp:
-    driver: local
