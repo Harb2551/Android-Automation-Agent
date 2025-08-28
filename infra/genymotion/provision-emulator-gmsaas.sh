@@ -266,11 +266,7 @@ EOF
     export ANDROID_ADB_SERVER_ADDRESS="host.docker.internal"
     log_info "Set ANDROID_ADB_SERVER_ADDRESS=host.docker.internal"
     
-    # Connect to host ADB device on port 5555
-    log_info "Connecting to host ADB device on port 5555..."
-    adb connect host.docker.internal:5555
-    
-    # Check for devices after connection
+    # Check for devices on host ADB server
     log_info "Checking for devices on host ADB server..."
     local devices
     devices=$(adb devices 2>&1)
@@ -306,9 +302,9 @@ EOF
     
     log_error "No working ADB devices found on host"
     log_error "Please establish gmsaas connection on host first:"
-    log_error "  1. adb kill-server"
-    log_error "  2. gmsaas auth token <your_token>"
-    log_error "  3. gmsaas instances adbconnect --adb-serial-port 5555 <instance_id>"
+    log_error "  1. gmsaas auth token <your_token>"
+    log_error "  2. gmsaas instances start <recipe_uuid> <name>"
+    log_error "  3. gmsaas instances adbconnect <instance_id>"
     log_error "  4. Then run this container"
     exit 1
 }
